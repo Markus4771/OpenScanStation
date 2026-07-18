@@ -1,4 +1,4 @@
-"""Kodak-i2600-Plugin mit SANE-Scan und USB-Diagnose-Fallback."""
+"""Kodak-i2600-Plugin mit produktivem SANE-Pfad und USB-Diagnose-Fallback."""
 
 from __future__ import annotations
 
@@ -20,7 +20,17 @@ from openscanstation.scanner.base import (
 from openscanstation.scanner.scan import ScanJob, ScanResult
 
 _DEVICE_PATTERN = re.compile(r"device `(?P<device>[^']+)' is a (?P<label>.+)")
-_MODE_MAP = {"color": "Color", "gray": "Gray", "lineart": "Lineart"}
+_MODE_CANDIDATES = {
+    "color": ("Color", "24bit Color", "Colour"),
+    "gray": ("Gray", "Grayscale", "8bit Gray"),
+    "lineart": ("Lineart", "Black & White", "Binary"),
+}
+_SOURCE_CANDIDATES = (
+    "Automatic Document Feeder",
+    "ADF Duplex",
+    "ADF Front",
+    "ADF",
+)
 
 
 class KodakI2600Plugin(ScannerPlugin):
@@ -28,11 +38,19 @@ class KodakI2600Plugin(ScannerPlugin):
     vendor_id = 0x040A
     product_id = 0x601D
 
+    @staticmethod
+    def _run(command: list[str], timeout: int = 20) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
     def _discover_sane(self) -> list[ScannerInfo]:
         try:
-            result = subprocess.run(
-                ["scanimage", "-L"], check=True, capture_output=True, text=True, timeout=15
-            )
+            result = self._run(["scanimage", "-L"], timeout=20)
         except (FileNotFoundError, subprocess.SubprocessError):
             return []
 
@@ -66,6 +84,23 @@ class KodakI2600Plugin(ScannerPlugin):
             )
         return scanners
 
+    def _device_options(self, device_name: str) -> str:
+        try:
+            result = self._run(
+                ["scanimage", "--device-name", device_name, "--help"], timeout=30
+            )
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return ""
+        return f"{result.stdout}\n{result.stderr}"
+
+    @staticmethod
+    def _pick_supported(options_text: str, candidates: tuple[str, ...]) -> str | None:
+        lowered = options_text.lower()
+        for candidate in candidates:
+            if candidate.lower() in lowered:
+                return candidate
+        return None
+
     def discover(self) -> list[ScannerInfo]:
         sane_scanners = self._discover_sane()
         if sane_scanners:
@@ -77,7 +112,7 @@ class KodakI2600Plugin(ScannerPlugin):
         return [
             ScannerInfo(
                 plugin_id=self.plugin_id,
-                name="Kodak i2600 (USB-Diagnose)",
+                name="Kodak i2600 (USB erkannt, Treiber fehlt)",
                 manufacturer="Kodak",
                 model="i2600",
                 connection=f"usb:{device.bus}:{device.address}",
@@ -95,7 +130,10 @@ class KodakI2600Plugin(ScannerPlugin):
 
     def get_status(self, device_name: str) -> ScannerStatus:
         if not device_name.startswith("usb:"):
-            connected = any(scanner.connection == device_name for scanner in self._discover_sane())
+            connected = any(
+                scanner.connection == device_name for scanner in self._discover_sane()
+            )
+            options = self._device_options(device_name) if connected else ""
             return ScannerStatus(
                 device=device_name,
                 state=ScannerState.READY if connected else ScannerState.OFFLINE,
@@ -103,10 +141,15 @@ class KodakI2600Plugin(ScannerPlugin):
                 backend="sane",
                 scan_supported=connected,
                 message=(
-                    "Kodak i2600 ist über SANE scanfähig."
+                    "Kodak i2600 ist über den installierten SANE/Kodak-Treiber scanfähig."
                     if connected
                     else "Kodak i2600 ist über SANE nicht erreichbar."
                 ),
+                details={
+                    "driver_ready": connected,
+                    "duplex_option_detected": "duplex" in options.lower(),
+                    "adf_option_detected": "adf" in options.lower(),
+                },
             )
 
         device = usb.core.find(idVendor=self.vendor_id, idProduct=self.product_id)
@@ -118,17 +161,17 @@ class KodakI2600Plugin(ScannerPlugin):
             backend="libusb/pyusb",
             scan_supported=False,
             message=(
-                "USB-Verbindung erkannt, aber kein SANE-Gerät verfügbar. Scannen ist damit noch nicht möglich."
+                "USB-Passthrough funktioniert. Installiere jetzt den x86_64-Kodak/SANE-Treiber in der VM; danach muss 'scanimage -L' den i2600 anzeigen."
                 if connected
-                else "Kodak i2600 wurde nicht am USB-Bus gefunden."
+                else "Kodak i2600 wurde nicht am USB-Bus der VM gefunden. Prüfe das Proxmox-USB-Passthrough."
             ),
-            details={"protocol_state": "diagnostic_only"},
+            details={"protocol_state": "driver_required", "usb_id": "040a:601d"},
         )
 
     def start_scan(self, device_name: str, options: dict) -> ScanResult:
         if device_name.startswith("usb:"):
             raise RuntimeError(
-                "Der Kodak wurde nur per USB-Diagnose erkannt. Prüfe mit 'scanimage -L', ob ein SANE-Treiber verfügbar ist."
+                "USB ist durchgereicht, aber der Scanner besitzt noch kein SANE-Gerät. Installiere den Kodak-x86_64-Treiber und prüfe 'scanimage -L'."
             )
 
         output = Path(options["output"]).expanduser().resolve()
@@ -137,30 +180,54 @@ class KodakI2600Plugin(ScannerPlugin):
             output=output,
             dpi=int(options.get("dpi", 300)),
             mode=str(options.get("mode", "color")),
-            source=str(options.get("source", "Automatic Document Feeder")),
+            source=str(options.get("source", "auto")),
         )
-        if job.mode not in _MODE_MAP:
+        if job.mode not in _MODE_CANDIDATES:
             raise ValueError("Ungültiger Farbmodus. Erlaubt: color, gray, lineart")
         if job.dpi not in (100, 150, 200, 240, 300, 400, 600):
             raise ValueError("Nicht unterstützte Kodak-Auflösung")
+
+        options_text = self._device_options(job.device)
+        selected_mode = self._pick_supported(options_text, _MODE_CANDIDATES[job.mode])
+        selected_source = self._pick_supported(options_text, _SOURCE_CANDIDATES)
 
         output.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="openscanstation-kodak-") as temp_dir:
             temp_png = Path(temp_dir) / "scan.png"
             command = [
-                "scanimage", "--device-name", job.device,
-                "--resolution", str(job.dpi),
-                "--mode", _MODE_MAP[job.mode],
-                "--format=png",
+                "scanimage",
+                "--device-name",
+                job.device,
+                "--resolution",
+                str(job.dpi),
             ]
+            if selected_mode:
+                command.extend(["--mode", selected_mode])
+            if selected_source:
+                command.extend(["--source", selected_source])
+            command.append("--format=png")
+
             try:
                 with temp_png.open("wb") as handle:
-                    subprocess.run(command, check=True, stdout=handle, stderr=subprocess.PIPE, timeout=300)
+                    subprocess.run(
+                        command,
+                        check=True,
+                        stdout=handle,
+                        stderr=subprocess.PIPE,
+                        timeout=600,
+                    )
             except FileNotFoundError as exc:
                 raise RuntimeError("scanimage ist nicht installiert") from exc
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError("Kodak-Scan wurde nach 10 Minuten abgebrochen") from exc
             except subprocess.CalledProcessError as exc:
                 message = exc.stderr.decode("utf-8", errors="replace").strip()
-                raise RuntimeError(f"Kodak-Scan fehlgeschlagen: {message}") from exc
+                raise RuntimeError(
+                    f"Kodak-Scan fehlgeschlagen: {message or 'unbekannter SANE-Fehler'}"
+                ) from exc
+
+            if not temp_png.exists() or temp_png.stat().st_size == 0:
+                raise RuntimeError("Der Kodak-Treiber hat keine Bilddaten geliefert")
 
             suffix = output.suffix.lower()
             if suffix == ".png":
