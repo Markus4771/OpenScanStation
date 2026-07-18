@@ -1,46 +1,127 @@
-name: Build Debian package
+name: Build and publish Debian package
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: openscanstation-deb-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-deb:
+    name: Build and validate DEB
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+      - name: Install build and test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            dpkg-dev \
+            python3 \
+            python3-pil \
+            python3-usb
 
-      - name: Build package
+      - name: Check Python sources
+        run: python3 -m compileall -q openscanstation plugins
+
+      - name: Check version consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE_VERSION="$(tr -d '[:space:]' < version.txt)"
+          CODE_VERSION="$(python3 - <<'PY'
+          from openscanstation.cli import VERSION
+          print(VERSION)
+          PY
+          )"
+          test "$FILE_VERSION" = "$CODE_VERSION" || {
+            echo "version.txt ($FILE_VERSION) und Programmversion ($CODE_VERSION) stimmen nicht überein."
+            exit 1
+          }
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            test "$TAG_VERSION" = "$FILE_VERSION" || {
+              echo "Git-Tag ($TAG_VERSION) und Paketversion ($FILE_VERSION) stimmen nicht überein."
+              exit 1
+            }
+          fi
+
+      - name: Build Debian package
         run: |
           chmod +x scripts/build_deb.sh
           ./scripts/build_deb.sh
 
-      - name: Validate package
+      - name: Validate package metadata and contents
+        shell: bash
         run: |
-          DEB_FILE=$(find dist -maxdepth 1 -name 'openscanstation_*.deb' -print -quit)
-          test -n "$DEB_FILE"
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < version.txt)"
+          DEB_FILE="dist/openscanstation_${VERSION}_all.deb"
+          test -f "$DEB_FILE"
+          test "$(dpkg-deb -f "$DEB_FILE" Package)" = "openscanstation"
+          test "$(dpkg-deb -f "$DEB_FILE" Version)" = "$VERSION"
+          test "$(dpkg-deb -f "$DEB_FILE" Architecture)" = "all"
           dpkg-deb --info "$DEB_FILE"
           dpkg-deb --contents "$DEB_FILE"
+          dpkg-deb --contents "$DEB_FILE" | grep -q './lib/systemd/system/openscanstation.service'
+          dpkg-deb --contents "$DEB_FILE" | grep -q './usr/bin/openscanstation-web'
+
+      - name: Smoke-test packaged application
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < version.txt)"
+          DEB_FILE="dist/openscanstation_${VERSION}_all.deb"
+          mkdir -p build/package-smoke-test
+          dpkg-deb -x "$DEB_FILE" build/package-smoke-test
+          cd build/package-smoke-test/opt/openscanstation
+          PYTHONPATH=. python3 -m openscanstation --help
+          PYTHONPATH=. python3 -m openscanstation.web --help
+
+      - name: Create SHA256 checksum
+        shell: bash
+        run: |
+          cd dist
+          sha256sum openscanstation_*.deb > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openscanstation-deb
-          path: dist/*.deb
+          name: openscanstation-deb-${{ github.sha }}
+          path: |
+            dist/*.deb
+            dist/SHA256SUMS
           if-no-files-found: error
+          retention-days: 30
 
-      - name: Attach package to GitHub release
+      - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.deb
+          files: |
+            dist/*.deb
+            dist/SHA256SUMS
           generate_release_notes: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        permissions:
+          contents: write
