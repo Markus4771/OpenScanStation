@@ -30,12 +30,12 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: $ARCH
-Depends: python3, python3-usb, sane-utils, sane-airscan
+Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan
 Maintainer: Markus Ach
 Description: Modulare Scannerplattform für Linux und Raspberry Pi
- OpenScanStation erkennt Scanner über austauschbare Plugins. Version 0.1.1
- unterstützt die Erkennung des Kodak i2600 über USB und von Samsung-AirScan-
- Geräten über SANE/AirScan.
+ OpenScanStation erkennt Scanner über austauschbare Plugins. Version $VERSION
+ unterstützt Statusabfragen und erste Einzelseiten-Scans mit Samsung-AirScan-
+ Geräten als PDF, PNG oder JPEG.
 EOF
 
 cat > "$BUILD_DIR/DEBIAN/postinst" <<'EOF'
