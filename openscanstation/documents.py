@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -64,20 +65,38 @@ def list_documents(query: str = "", limit: int = 100) -> list[dict]:
     return result
 
 
+def _ocr_image(source: Path, language: str) -> str:
+    result = subprocess.run(
+        ["tesseract", str(source), "stdout", "-l", language],
+        check=True, capture_output=True, text=True, timeout=600,
+    )
+    return result.stdout.strip()
+
+
 def run_ocr(filename: str, language: str = "deu") -> str:
     source = SCAN_DIR / filename
     if not source.is_file():
         raise FileNotFoundError(filename)
-    command = ["tesseract", str(source), "stdout", "-l", language]
     try:
-        result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=600)
-        text = result.stdout.strip()
-        status = "fertig"
+        if source.suffix.lower() == ".pdf":
+            with tempfile.TemporaryDirectory(prefix="openscanstation-ocr-") as tmp:
+                prefix = Path(tmp) / "page"
+                subprocess.run(
+                    ["pdftoppm", "-png", "-r", "300", str(source), str(prefix)],
+                    check=True, capture_output=True, timeout=600,
+                )
+                pages = sorted(Path(tmp).glob("page-*.png"))
+                if not pages:
+                    raise RuntimeError("PDF konnte nicht in Bilder umgewandelt werden")
+                text = "\n\n".join(_ocr_image(page, language) for page in pages).strip()
+        else:
+            text = _ocr_image(source, language)
     except FileNotFoundError as exc:
-        raise RuntimeError("Tesseract ist nicht installiert") from exc
+        raise RuntimeError("Tesseract oder pdftoppm ist nicht installiert") from exc
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError(exc.stderr.strip() or "OCR fehlgeschlagen") from exc
+        stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        raise RuntimeError(stderr.strip() or "OCR fehlgeschlagen") from exc
     with _connect() as db:
-        db.execute("UPDATE documents SET ocr_text=?, ocr_status=? WHERE filename=?", (text, status, filename))
+        db.execute("UPDATE documents SET ocr_text=?, ocr_status=? WHERE filename=?", (text, "fertig", filename))
         db.commit()
     return text
