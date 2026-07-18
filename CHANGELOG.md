@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+
+- Dokumentenkatalog auf Basis von SQLite ergänzt.
+- Volltextsuche über Titel, Dateiname, Scanner, Tags und OCR-Text ergänzt.
+- OCR mit Tesseract und deutscher Sprache integriert.
+- PDF-Seiten werden für OCR automatisch über `pdftoppm` aufbereitet.
+- Konfigurierbare Scanprofile für Rechnung, Lieferschein, Dokument, Foto und Archiv ergänzt.
+- WebGUI um die Bereiche Dashboard, Dokumente und Scanprofile erweitert.
+- Dokumentvorschau und Download im Browser ergänzt.
+- OCR kann automatisch beim Scan oder nachträglich gestartet werden.
+- Samsung-AirScan und Kodak-SANE bleiben gemeinsam auswählbar.
+- Diagnose prüft jetzt zusätzlich Tesseract und Poppler.
+- Debian-Paket enthält alle OCR-Abhängigkeiten.
+
 ## 0.3.1
 
 - WebGUI auf Port 8101 um Scanformular erweitert.
@@ -24,32 +38,16 @@
 ## 0.2.0
 
 - Einheitliches Datenmodell `ScannerStatus` eingeführt.
-- Zustände `bereit`, `offline`, `beschäftigt`, `fehler` und `unbekannt` definiert.
-- Kodak-i2600-Plugin auf den normalisierten Status umgestellt.
-- Samsung-AirScan-Plugin auf den normalisierten Status umgestellt.
-- Scannerfähigkeiten um Auflösungen und Farbmodi erweitert.
-- CLI-Befehl `openscanstation status` ergänzt.
-- Detaillierte Ausgabe für Backend, Verbindung, Scan-Unterstützung, ADF, Duplex und verfügbare Modi ergänzt.
-- Noch nicht auslesbare Sensorwerte werden ausdrücklich als `nicht verfügbar` angezeigt.
+- Kodak-i2600- und Samsung-AirScan-Plugin auf den normalisierten Status umgestellt.
+- Scannerfähigkeiten, Statusausgabe und CLI-Diagnose erweitert.
 
 ## 0.1.1
 
 - Zentralen Scanner Manager hinzugefügt.
 - Kodak-i2600- und Samsung-AirScan-Plugin gemeinsam registriert.
-- Pluginfehler werden isoliert und blockieren die übrige Erkennung nicht.
-- Doppelte Scannerergebnisse werden gefiltert.
-- Diagnosebefehl `python3 -m openscanstation scanners` hinzugefügt.
-- Scanner-Erkennung mit echtem Kodak i2600 und Samsung C48x erfolgreich getestet.
-- Debian-Paket-Build für `openscanstation_0.1.1_all.deb` ergänzt.
-- Globalen Befehl `openscanstation` ergänzt.
-- Abhängigkeiten für PyUSB, SANE und AirScan im Paket definiert.
-- udev-Regel für den Kodak i2600 ergänzt.
-- Installations-, Update-, Deinstallations- und Fehlerdiagnose-Anleitung ergänzt.
+- Debian-Paketstruktur, udev-Regel und Diagnose ergänzt.
 
 ## 0.1.0
 
 - Projekt OpenScanStation initialisiert.
 - Modulare Scanner-Architektur festgelegt.
-- Kodak i2600 als direktes USB-/libusb-Plugin vorgesehen.
-- Samsung AirScan als SANE-/eSCL-Plugin vorgesehen.
-- README und Versionsverwaltung angelegt.
