@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.1
+
+- Konsolen-Installer `install.sh` ergänzt.
+- Einheitliche Befehle `install`, `update`, `status` und `uninstall` ergänzt.
+- Neueste DEB-Datei wird bevorzugt direkt aus dem aktuellen GitHub Release geladen.
+- Falls noch kein Release-Paket vorhanden ist, wird automatisch aus dem aktuellen `main`-Stand gebaut.
+- Optionaler Zugriff auf private Releases über die Umgebungsvariable `GITHUB_TOKEN` ergänzt.
+- Dienst wird nach Installation oder Update automatisch aktiviert und gestartet.
+- Automatischer Health-Check auf Port 8101 ergänzt.
+- Fehlerausgabe verweist direkt auf den passenden `journalctl`-Diagnosebefehl.
+- Versions- und Installationsdokumentation aktualisiert.
+
 ## 0.4.0
 
 - Dokumentenkatalog auf Basis von SQLite ergänzt.
