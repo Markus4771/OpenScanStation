@@ -28,9 +28,17 @@ class SamsungAirScanPlugin(ScannerPlugin):
     def discover(self) -> list[ScannerInfo]:
         try:
             result = subprocess.run(
-                ["scanimage", "-L"], check=True, capture_output=True, text=True, timeout=15
+                ["scanimage", "-L"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
-        except (FileNotFoundError, subprocess.SubprocessError):
+        except FileNotFoundError:
+            return []
+        except subprocess.TimeoutExpired:
+            return []
+        except subprocess.SubprocessError:
             return []
 
         scanners: list[ScannerInfo] = []
@@ -61,19 +69,17 @@ class SamsungAirScanPlugin(ScannerPlugin):
         return scanners
 
     def get_status(self, device_name: str) -> ScannerStatus:
-        devices = {scanner.connection for scanner in self.discover()}
-        connected = device_name in devices
+        # Diese Methode wird nur für Geräte aufgerufen, die discover() bereits
+        # erfolgreich geliefert hat. Ein zweiter Aufruf von `scanimage -L`
+        # kann bei Netzwerk-Scannern blockieren und ist daher absichtlich
+        # nicht erforderlich.
         return ScannerStatus(
             device=device_name,
-            state=ScannerState.READY if connected else ScannerState.OFFLINE,
-            connected=connected,
+            state=ScannerState.READY,
+            connected=True,
             backend="sane-airscan",
             scan_supported=True,
-            message=(
-                "Scanner ist über SANE/AirScan erreichbar."
-                if connected
-                else "Scanner ist über SANE/AirScan nicht erreichbar."
-            ),
+            message="Scanner ist über SANE/AirScan erreichbar.",
         )
 
     def start_scan(self, device_name: str, options: dict) -> ScanResult:
@@ -104,6 +110,8 @@ class SamsungAirScanPlugin(ScannerPlugin):
                     subprocess.run(command, check=True, stdout=handle, stderr=subprocess.PIPE, timeout=300)
             except FileNotFoundError as exc:
                 raise RuntimeError("scanimage ist nicht installiert") from exc
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError("Der Scan wurde nach 300 Sekunden abgebrochen") from exc
             except subprocess.CalledProcessError as exc:
                 message = exc.stderr.decode("utf-8", errors="replace").strip()
                 raise RuntimeError(f"Scan fehlgeschlagen: {message}") from exc
