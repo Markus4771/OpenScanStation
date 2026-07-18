@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.3
+
+- Neue lesende Systemseite in der WebGUI ergänzt.
+- Anzeige von Version, Dokumentanzahl, Datenbestand und freiem Speicher ergänzt.
+- Übersicht der zuletzt gefundenen Sicherungen mit Größe und Prüfsummenstatus ergänzt.
+- Neue REST-Schnittstelle `/api/system` ergänzt.
+- Sicherheits-Header `X-Content-Type-Options`, `X-Frame-Options` und Content-Security-Policy ergänzt.
+- Administrative Aktionen bleiben bewusst auf der Konsole, solange keine Benutzeranmeldung vorhanden ist.
+
 ## 0.4.2
 
 - Vollständige Sicherung aller produktiven Daten unter `/var/lib/openscanstation` ergänzt.
