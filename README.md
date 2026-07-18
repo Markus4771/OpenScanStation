@@ -1,24 +1,58 @@
 # OpenScanStation
 
-**Version:** 0.1.0
+**Version:** 0.1.1
 
-OpenScanStation ist eine modulare, webbasierte Dokumentenscanner-Plattform für Linux und Raspberry Pi.
+OpenScanStation ist eine modulare Scannerplattform für Linux und Raspberry Pi.
 
-## Erste Scanner
+## Aktueller Funktionsumfang
 
-- Kodak i2600: direkte USB-/libusb-Entwicklung
-- Samsung AirScan: Anbindung über SANE/eSCL/AirScan
+Version 0.1.1 ist die erste installierbare Testversion für die Scanner-Erkennung.
 
-## Ziele
+Unterstützt werden aktuell:
 
-- Headless-Betrieb mit WebGUI
-- Einheitliche Scanner-API
-- Scanner-Plugins statt herstellerspezifischer Logik im Kern
-- OCR, PDF/A, Barcode und QR-Code
-- Workflows für SMB, Nextcloud, Paperless-ngx, Odoo und E-Mail
-- REST-API
-- Debian-Paket
-- Backup und Updates
+- Kodak i2600 über USB/PyUSB
+- Samsung-AirScan-/eSCL-Geräte über SANE und `sane-airscan`
+- gemeinsamer Scanner Manager
+- CLI-Diagnose
+- Debian-Paketstruktur
+- Kodak-udev-Regel
+
+Ein echter Dokumentenscan ist in Version 0.1.1 noch nicht enthalten.
+
+## Scanner prüfen
+
+Aus dem Repository:
+
+```bash
+python3 -m openscanstation scanners
+```
+
+Nach Installation des Debian-Pakets:
+
+```bash
+openscanstation scanners
+```
+
+## Debian-Paket bauen
+
+```bash
+chmod +x scripts/build_deb.sh
+./scripts/build_deb.sh
+```
+
+Das Paket wird hier erzeugt:
+
+```text
+dist/openscanstation_0.1.1_all.deb
+```
+
+Installation:
+
+```bash
+sudo apt install -y ./dist/openscanstation_0.1.1_all.deb
+```
+
+Die vollständige Anleitung steht in [INSTALLATION.md](INSTALLATION.md).
 
 ## Architektur
 
@@ -32,19 +66,21 @@ Scanner-Manager
         +-- weitere Scanner-Plugins
 ```
 
-## Entwicklungsstand
+Scanner werden ausschließlich über Plugins angebunden. Herstellerspezifische Logik gehört nicht in den Core.
 
-Phase 0.1.0: Projektgrundlage und Scanner-Erkennung.
+## Entwicklungsregel
+
+Während einer laufenden Version werden keine zusätzlichen Produktfunktionen aufgenommen. Neue Ideen werden zunächst in `BACKLOG.md` dokumentiert und erst nach ausdrücklicher Freigabe einer Version zugeordnet.
 
 ## Roadmap
 
 ### 0.1.x
 
 - Projektstruktur und Dokumentation
-- Scanner-Manager
+- Scanner Manager
 - Kodak-USB-Erkennung
 - Samsung-AirScan-Erkennung
-- WebGUI-Grundgerüst
+- Diagnose und installierbares Testpaket
 
 ### 0.2.x
 
@@ -68,5 +104,5 @@ Phase 0.1.0: Projektgrundlage und Scanner-Erkennung.
 
 ### 1.0.0
 
-- Produktive Debian-Installation
+- produktive Debian-Installation
 - Backup, Update und Plugin-Verwaltung
