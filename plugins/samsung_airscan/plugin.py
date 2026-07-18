@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import re
 import subprocess
-from typing import Any
 
-from openscanstation.scanner.base import ScannerCapabilities, ScannerInfo, ScannerPlugin
-
+from openscanstation.scanner.base import (
+    ScannerCapabilities,
+    ScannerInfo,
+    ScannerPlugin,
+    ScannerState,
+    ScannerStatus,
+)
 
 _DEVICE_PATTERN = re.compile(r"device `(?P<device>[^']+)' is a (?P<label>.+)")
 
@@ -49,17 +53,26 @@ class SamsungAirScanPlugin(ScannerPlugin):
                         duplex=True,
                         adf=True,
                         network=True,
+                        resolutions_dpi=(75, 100, 150, 200, 300, 600),
+                        color_modes=("Farbe", "Graustufen", "Schwarz/Weiß"),
                     ),
                 )
             )
 
         return scanners
 
-    def get_status(self, device_name: str) -> dict[str, Any]:
+    def get_status(self, device_name: str) -> ScannerStatus:
         devices = {scanner.connection for scanner in self.discover()}
-        return {
-            "device": device_name,
-            "connected": device_name in devices,
-            "backend": "sane-airscan",
-            "scan_supported": True,
-        }
+        connected = device_name in devices
+        return ScannerStatus(
+            device=device_name,
+            state=ScannerState.READY if connected else ScannerState.OFFLINE,
+            connected=connected,
+            backend="sane-airscan",
+            scan_supported=True,
+            message=(
+                "Scanner ist über SANE/AirScan erreichbar."
+                if connected
+                else "Scanner ist über SANE/AirScan nicht erreichbar."
+            ),
+        )
