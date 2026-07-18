@@ -37,8 +37,11 @@ jobs:
             python3-pil \
             python3-usb
 
-      - name: Check Python sources
-        run: python3 -m compileall -q openscanstation plugins
+      - name: Check sources and installer
+        run: |
+          python3 -m compileall -q openscanstation plugins
+          bash -n scripts/build_deb.sh
+          bash -n install.sh
 
       - name: Check version consistency
         shell: bash
