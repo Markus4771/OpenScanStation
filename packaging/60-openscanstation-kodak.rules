@@ -1,0 +1,2 @@
+# Kodak i2600 (USB-ID 040a:601d)
+SUBSYSTEM=="usb", ATTR{idVendor}=="040a", ATTR{idProduct}=="601d", MODE="0660", GROUP="scanner", TAG+="uaccess"
