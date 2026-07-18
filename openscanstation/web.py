@@ -16,6 +16,7 @@ from openscanstation.cli import VERSION
 from openscanstation.documents import SCAN_DIR, add_document, list_documents, run_ocr
 from openscanstation.profiles import load_profiles
 from openscanstation.scanner.manager import ScannerManager
+from openscanstation.system_info import system_payload
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8101
@@ -96,8 +97,8 @@ def _layout(content: str, title: str = "OpenScanStation", notice: str = "", erro
     note = f'<div class="notice {"error" if error else "success"}">{html.escape(notice)}</div>' if notice else ""
     return f'''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(title)}</title><style>
-body{{font-family:system-ui,sans-serif;margin:0;background:#f3f5f7;color:#17202a}}header{{background:#17202a;color:#fff;padding:1.25rem 2rem}}header h1{{margin:0}}nav{{margin-top:.8rem}}nav a{{color:#fff;margin-right:1rem;text-decoration:none}}main{{max-width:1200px;margin:1.5rem auto;padding:0 1rem}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem}}.card,.panel{{background:#fff;border-radius:12px;padding:1.2rem;box-shadow:0 2px 12px #0001;margin-bottom:1rem}}.ready,.warning{{padding:.25rem .55rem;border-radius:999px;font-weight:700;font-size:.85rem}}.ready{{background:#d5f5e3;color:#196f3d}}.warning{{background:#fdebd0;color:#935116}}.headline{{display:flex;justify-content:space-between;gap:1rem;align-items:center}}form{{display:grid;gap:.8rem}}.form-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.8rem}}label{{display:grid;gap:.3rem;font-weight:700}}input,select,button{{padding:.7rem;border:1px solid #bcc5cc;border-radius:8px;background:#fff}}button{{background:#17202a;color:#fff;font-weight:700;cursor:pointer}}table{{width:100%;border-collapse:collapse}}th,td{{padding:.65rem;border-bottom:1px solid #e5e8eb;text-align:left;vertical-align:top}}.notice{{padding:1rem;border-radius:8px;margin-bottom:1rem}}.success{{background:#d5f5e3}}.error{{background:#fadbd8}}code{{overflow-wrap:anywhere}}.muted{{color:#65727e;font-size:.9rem}}
-</style></head><body><header><h1>OpenScanStation</h1><div>Version {VERSION} · Port {DEFAULT_PORT}</div><nav><a href="/">Dashboard</a><a href="/documents">Dokumente</a><a href="/profiles">Scanprofile</a><a href="/api/scanners">API</a><a href="/health">Systemstatus</a></nav></header><main>{note}{content}</main></body></html>'''
+body{{font-family:system-ui,sans-serif;margin:0;background:#f3f5f7;color:#17202a}}header{{background:#17202a;color:#fff;padding:1.25rem 2rem}}header h1{{margin:0}}nav{{margin-top:.8rem}}nav a{{color:#fff;margin-right:1rem;text-decoration:none}}main{{max-width:1200px;margin:1.5rem auto;padding:0 1rem}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}}.card,.panel{{background:#fff;border-radius:12px;padding:1.2rem;box-shadow:0 2px 12px #0001;margin-bottom:1rem}}.ready,.warning{{padding:.25rem .55rem;border-radius:999px;font-weight:700;font-size:.85rem}}.ready{{background:#d5f5e3;color:#196f3d}}.warning{{background:#fdebd0;color:#935116}}.headline{{display:flex;justify-content:space-between;gap:1rem;align-items:center}}form{{display:grid;gap:.8rem}}.form-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.8rem}}label{{display:grid;gap:.3rem;font-weight:700}}input,select,button{{padding:.7rem;border:1px solid #bcc5cc;border-radius:8px;background:#fff}}button{{background:#17202a;color:#fff;font-weight:700;cursor:pointer}}table{{width:100%;border-collapse:collapse}}th,td{{padding:.65rem;border-bottom:1px solid #e5e8eb;text-align:left;vertical-align:top}}.notice{{padding:1rem;border-radius:8px;margin-bottom:1rem}}.success{{background:#d5f5e3}}.error{{background:#fadbd8}}code{{overflow-wrap:anywhere}}.muted{{color:#65727e;font-size:.9rem}}.metric{{font-size:1.6rem;font-weight:800;margin:.2rem 0}}progress{{width:100%;height:1.1rem}}
+</style></head><body><header><h1>OpenScanStation</h1><div>Version {VERSION} · Port {DEFAULT_PORT}</div><nav><a href="/">Dashboard</a><a href="/documents">Dokumente</a><a href="/profiles">Scanprofile</a><a href="/system">System</a><a href="/api/scanners">API</a></nav></header><main>{note}{content}</main></body></html>'''
 
 
 def _dashboard(message: str = "", error: bool = False) -> str:
@@ -134,10 +135,31 @@ def _profiles_page() -> str:
     return _layout(f'<section class="panel"><h2>Scanprofile</h2><p>Konfiguration: <code>/var/lib/openscanstation/profiles.json</code></p><table><tr><th>Profil</th><th>DPI</th><th>Modus</th><th>Format</th><th>OCR</th><th>Duplex</th></tr>{rows}</table></section>',"Scanprofile")
 
 
+def _system_page() -> str:
+    data = system_payload()
+    backup_rows = ''.join(
+        f'<tr><td>{html.escape(item["name"])}</td><td>{html.escape(item["size_human"])}</td><td>{"Ja" if item["checksum"] else "Nein"}</td></tr>'
+        for item in data["backups"]
+    ) or '<tr><td colspan="3">Noch keine Sicherungen gefunden.</td></tr>'
+    content = f'''
+    <div class="grid">
+      <article class="card"><h2>Version</h2><div class="metric">{VERSION}</div><p>WebGUI auf Port {DEFAULT_PORT}</p></article>
+      <article class="card"><h2>Dokumente</h2><div class="metric">{data["document_count"]}</div><p>Datenbestand: {html.escape(data["data_size_human"])}</p></article>
+      <article class="card"><h2>Freier Speicher</h2><div class="metric">{html.escape(data["disk_free_human"])}</div><progress max="100" value="{data["disk_percent"]}"></progress><p>{data["disk_percent"]}% belegt</p></article>
+    </div>
+    <section class="panel"><h2>Pfade</h2><table><tr><th>Bereich</th><th>Pfad</th></tr><tr><td>Daten</td><td><code>{html.escape(data["data_dir"])}</code></td></tr><tr><td>Scans</td><td><code>{html.escape(data["scan_dir"])}</code></td></tr><tr><td>Sicherungen</td><td><code>{html.escape(data["backup_dir"])}</code></td></tr></table></section>
+    <section class="panel"><h2>Letzte Sicherungen</h2><p class="muted">Sicherungen werden aus Sicherheitsgründen weiterhin über <code>sudo openscanstation-backup create</code> erstellt.</p><table><tr><th>Datei</th><th>Größe</th><th>Prüfsumme</th></tr>{backup_rows}</table></section>
+    <section class="panel"><h2>Diagnose</h2><p>Scanner- und Systemdiagnose auf der Konsole:</p><code>openscanstation doctor</code></section>
+    '''
+    return _layout(content, "System")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version=f"OpenScanStation/{VERSION}"
     def _send(self, body: bytes, ctype: str, status: HTTPStatus=HTTPStatus.OK, disposition: str|None=None):
         self.send_response(status); self.send_header("Content-Type",ctype); self.send_header("Content-Length",str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
         if disposition: self.send_header("Content-Disposition",disposition)
         self.end_headers(); self.wfile.write(body)
     def _json(self,data,status=HTTPStatus.OK): self._send(json.dumps(data,ensure_ascii=False,indent=2).encode(),"application/json; charset=utf-8",status)
@@ -147,10 +169,12 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/": self._html(_dashboard())
         elif path=="/documents": self._html(_documents_page(parse_qs(parsed.query).get("q",[""])[0]))
         elif path=="/profiles": self._html(_profiles_page())
+        elif path=="/system": self._html(_system_page())
         elif path=="/health": self._json({"status":"ok","service":"openscanstation","version":VERSION,"port":DEFAULT_PORT})
         elif path=="/version": self._json({"version":VERSION})
         elif path=="/api/scanners": self._json(_scanner_payload())
         elif path=="/api/documents": self._json({"documents":list_documents(parse_qs(parsed.query).get("q",[""])[0])})
+        elif path=="/api/system": self._json({"version": VERSION, **system_payload()})
         elif path.startswith("/scans/"):
             name=unquote(path.removeprefix("/scans/"))
             if not _SAFE_FILE.fullmatch(name): return self._json({"error":"invalid_filename"},HTTPStatus.BAD_REQUEST)
