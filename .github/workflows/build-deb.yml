@@ -1,0 +1,46 @@
+name: Build Debian package
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+
+      - name: Build package
+        run: |
+          chmod +x scripts/build_deb.sh
+          ./scripts/build_deb.sh
+
+      - name: Validate package
+        run: |
+          DEB_FILE=$(find dist -maxdepth 1 -name 'openscanstation_*.deb' -print -quit)
+          test -n "$DEB_FILE"
+          dpkg-deb --info "$DEB_FILE"
+          dpkg-deb --contents "$DEB_FILE"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openscanstation-deb
+          path: dist/*.deb
+          if-no-files-found: error
+
+      - name: Attach package to GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.deb
+          generate_release_notes: true
