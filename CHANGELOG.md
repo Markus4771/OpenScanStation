@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0
+
+- Einheitliches Datenmodell `ScannerStatus` eingeführt.
+- Zustände `bereit`, `offline`, `beschäftigt`, `fehler` und `unbekannt` definiert.
+- Kodak-i2600-Plugin auf den normalisierten Status umgestellt.
+- Samsung-AirScan-Plugin auf den normalisierten Status umgestellt.
+- Scannerfähigkeiten um Auflösungen und Farbmodi erweitert.
+- CLI-Befehl `openscanstation status` ergänzt.
+- Detaillierte Ausgabe für Backend, Verbindung, Scan-Unterstützung, ADF, Duplex und verfügbare Modi ergänzt.
+- Noch nicht auslesbare Sensorwerte werden ausdrücklich als `nicht verfügbar` angezeigt.
+
 ## 0.1.1
 
 - Zentralen Scanner Manager hinzugefügt.
