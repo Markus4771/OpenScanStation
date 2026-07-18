@@ -1,0 +1,7 @@
+[Unit]
+Description=OpenScanStation Health-Check
+After=openscanstation.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/openscanstation-watchdog
