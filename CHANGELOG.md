@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.1
+
+- WebGUI auf Port 8101 um Scanformular erweitert.
+- Samsung-AirScan- und Kodak-SANE-Geräte sind direkt auswählbar.
+- Auflösung, Farbmodus und Ausgabeformat können in der WebGUI gewählt werden.
+- Scans werden dauerhaft unter `/var/lib/openscanstation/scans` gespeichert.
+- Download und Übersicht der letzten Scans ergänzt.
+- REST-Endpunkt `/api/scans` ergänzt.
+- Gleichzeitige Scanaufträge werden durch eine Sperre verhindert.
+- Debian-Paket und systemd-Härtung für den persistenten Scanordner angepasst.
+- GitHub Actions baut bei jedem Push automatisch eine DEB-Datei.
+- Bei Versions-Tags `v*` wird die DEB-Datei an den GitHub Release angehängt.
+
+## 0.3.0
+
+- WebGUI und REST-API auf Port 8101 ergänzt.
+- Health-, Versions- und Scanner-Endpunkte ergänzt.
+- systemd-Dienst und Integration in die IT-Projektzentrale ergänzt.
+- Diagnosebefehl `openscanstation doctor` für Intel-Proxmox-VM, USB und SANE ergänzt.
+- Kodak i2600 kann über ein installiertes x86_64-SANE-Backend scannen.
+
 ## 0.2.0
 
 - Einheitliches Datenmodell `ScannerStatus` eingeführt.
