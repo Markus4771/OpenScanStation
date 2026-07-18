@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.5
+
+- Langsame Scannererkennung aus den HTTP-Anfragen entfernt.
+- Threadsicheren Scanner-Cache mit automatischer Aktualisierung alle 10 Sekunden ergänzt.
+- Dashboard und Scanner-API lesen den Scannerstatus jetzt ohne blockierende SANE-/AirScan-Abfragen.
+- Button „Scanner neu suchen“ ergänzt; die Erkennung läuft im Hintergrund.
+- Cache-Zeitpunkt und Ladezustand werden im Dashboard und über `/api/scanners` angezeigt.
+- Eine echte Hardwareerkennung erfolgt weiterhin unmittelbar vor einem Scan, damit keine veraltete Geräteverbindung verwendet wird.
+
+## 0.4.4
+
+- systemd-Watchdog und Timer für den Health-Endpunkt ergänzt.
+- Der Dienst kann bei einem fehlgeschlagenen Health-Check automatisch neu gestartet werden.
+
 ## 0.4.3
 
 - Neue lesende Systemseite in der WebGUI ergänzt.
