@@ -7,7 +7,7 @@ from pathlib import Path
 
 from openscanstation.scanner.manager import ScannerManager
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 
 def _format_optional(value: bool | None) -> str:
@@ -80,17 +80,45 @@ def _print_status() -> int:
 def _scan(args: argparse.Namespace) -> int:
     manager = ScannerManager()
     result = manager.discover()
-    candidates = [scanner for scanner in result.scanners if scanner.plugin_id == "samsung_airscan"]
+    candidates = []
+    for scanner in result.scanners:
+        plugin = manager.get_plugin(scanner.plugin_id)
+        if plugin is None:
+            continue
+        status = plugin.get_status(scanner.connection)
+        if status.scan_supported:
+            candidates.append(scanner)
+
     if not candidates:
-        print("Kein unterstützter Samsung-AirScan-Scanner gefunden.")
+        print("Kein scanfähiger Scanner gefunden.")
+        if result.scanners:
+            print("Erkannte Geräte:")
+            for item in result.scanners:
+                plugin = manager.get_plugin(item.plugin_id)
+                status = plugin.get_status(item.connection) if plugin else None
+                note = status.message if status else "Plugin nicht verfügbar"
+                print(f"- {item.name}: {note}")
         return 1
+
     scanner = candidates[0]
     if args.scanner:
-        matches = [item for item in candidates if args.scanner.lower() in item.name.lower() or args.scanner.lower() in item.connection.lower()]
+        needle = args.scanner.lower()
+        matches = [
+            item for item in candidates
+            if needle in item.name.lower()
+            or needle in item.connection.lower()
+            or needle in item.plugin_id.lower()
+            or needle in item.manufacturer.lower()
+            or needle in item.model.lower()
+        ]
         if not matches:
-            print(f"Scanner '{args.scanner}' wurde nicht gefunden.")
+            print(f"Scanner '{args.scanner}' wurde nicht als scanfähig gefunden.")
+            print("Scanfähige Scanner:")
+            for item in candidates:
+                print(f"- {item.name} ({item.plugin_id})")
             return 1
         scanner = matches[0]
+
     plugin = manager.get_plugin(scanner.plugin_id)
     if plugin is None:
         print("Scanner-Plugin ist nicht verfügbar.")
@@ -115,9 +143,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("scanners", help="Unterstützte Scanner erkennen")
     subparsers.add_parser("status", help="Detaillierten Scannerstatus anzeigen")
-    scan_parser = subparsers.add_parser("scan", help="Eine Seite mit Samsung AirScan scannen")
-    scan_parser.add_argument("--scanner", help="Teil des Scannernamens oder der Gerätekennung")
-    scan_parser.add_argument("--dpi", type=int, default=300, choices=(75, 100, 150, 200, 300, 600))
+    scan_parser = subparsers.add_parser("scan", help="Eine Seite mit einem scanfähigen Scanner scannen")
+    scan_parser.add_argument("--scanner", help="Name, Modell, Hersteller, Plugin oder Gerätekennung")
+    scan_parser.add_argument("--dpi", type=int, default=300, choices=(75, 100, 150, 200, 240, 300, 400, 600))
     scan_parser.add_argument("--mode", default="color", choices=("color", "gray", "lineart"))
     scan_parser.add_argument("--output", default="scan.pdf", help="Zieldatei: .pdf, .png, .jpg oder .jpeg")
     return parser
