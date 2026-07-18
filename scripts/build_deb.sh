@@ -28,8 +28,7 @@ cp "$ROOT_DIR/CHANGELOG.md" "$BUILD_DIR/usr/share/doc/openscanstation/CHANGELOG.
 cp "$ROOT_DIR/packaging/60-openscanstation-kodak.rules" "$BUILD_DIR/lib/udev/rules.d/60-openscanstation-kodak.rules"
 
 if [ -f "$ROOT_DIR/integration/it-projektzentrale.json" ]; then
-  cp "$ROOT_DIR/integration/it-projektzentrale.json" \
-    "$BUILD_DIR/usr/share/it-projektzentrale/projects/openscanstation.json"
+  cp "$ROOT_DIR/integration/it-projektzentrale.json" "$BUILD_DIR/usr/share/it-projektzentrale/projects/openscanstation.json"
 fi
 
 cat > "$BUILD_DIR/DEBIAN/control" <<EOF
@@ -38,31 +37,27 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: $ARCH
-Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils
+Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils, tesseract-ocr, tesseract-ocr-deu, poppler-utils
 Maintainer: Markus Ach
-Description: Modulare Scannerplattform mit WebGUI auf Port 8101
- OpenScanStation erkennt Kodak- und Samsung-Scanner über Plugins, bietet
- SANE-Scans, Download der erzeugten Dateien sowie REST-Endpunkte auf Port 8101.
+Description: Zentrale Scannerplattform mit WebGUI auf Port 8101
+ OpenScanStation erkennt Kodak- und Samsung-Scanner über Plugins und bietet
+ Scanprofile, Dokumentenkatalog, OCR, Volltextsuche, Vorschau und REST-API.
 EOF
 
 cat > "$BUILD_DIR/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
-
 mkdir -p /var/lib/openscanstation/scans
 chmod 0750 /var/lib/openscanstation /var/lib/openscanstation/scans
-
 if command -v udevadm >/dev/null 2>&1; then
     udevadm control --reload-rules || true
     udevadm trigger --subsystem-match=usb || true
 fi
-
 if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload || true
     systemctl enable openscanstation.service || true
     systemctl restart openscanstation.service || true
 fi
-
 exit 0
 EOF
 chmod 0755 "$BUILD_DIR/DEBIAN/postinst"
