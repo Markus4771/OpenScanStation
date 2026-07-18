@@ -10,7 +10,7 @@ WEB_PORT="8101"
 SOURCE_DIR="/opt/OpenScanStation"
 ACTION="${1:-install}"
 
-log() { printf '[OpenScanStation] %s\n' "$*"; }
+log() { printf '[OpenScanStation] %s\n' "$*" >&2; }
 fail() { printf '[OpenScanStation] FEHLER: %s\n' "$*" >&2; exit 1; }
 
 require_root() {
@@ -21,13 +21,6 @@ install_base_dependencies() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
   apt-get install -y ca-certificates curl git python3 dpkg-dev
-}
-
-github_headers() {
-  printf '%s\n' 'Accept: application/vnd.github+json'
-  if [ -n "${GITHUB_TOKEN:-}" ]; then
-    printf 'Authorization: Bearer %s\n' "$GITHUB_TOKEN"
-  fi
 }
 
 download_latest_release() {
@@ -68,21 +61,32 @@ build_from_source() {
   log "Kein passendes Release-Paket gefunden. Baue aus dem aktuellen GitHub-Stand."
 
   if [ -d "$SOURCE_DIR/.git" ]; then
-    git -C "$SOURCE_DIR" fetch --prune origin
-    git -C "$SOURCE_DIR" reset --hard origin/main
+    git -C "$SOURCE_DIR" fetch --prune origin >&2
+    git -C "$SOURCE_DIR" reset --hard origin/main >&2
   else
     rm -rf "$SOURCE_DIR"
-    git clone --depth 1 "$REPO_URL" "$SOURCE_DIR"
+    git clone --depth 1 "$REPO_URL" "$SOURCE_DIR" >&2
   fi
 
   chmod +x "$SOURCE_DIR/scripts/build_deb.sh"
-  "$SOURCE_DIR/scripts/build_deb.sh"
+  "$SOURCE_DIR/scripts/build_deb.sh" >&2
 
   local package_file
   package_file="$(find "$SOURCE_DIR/dist" -maxdepth 1 -type f -name 'openscanstation_*_all.deb' -print | sort -V | tail -n 1)"
   [ -n "$package_file" ] || fail "Beim Build wurde kein Debian-Paket erzeugt."
   cp "$package_file" "$temp_dir/"
   printf '%s\n' "$temp_dir/${package_file##*/}"
+}
+
+wait_for_health() {
+  local attempt
+  for attempt in $(seq 1 15); do
+    if curl -fsS --max-time 3 "http://127.0.0.1:${WEB_PORT}/health" >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
 }
 
 install_or_update() {
@@ -100,13 +104,16 @@ install_or_update() {
   apt-get install -y "$package_file"
   systemctl daemon-reload
   systemctl enable --now "$SERVICE"
+  systemctl restart "$SERVICE"
 
-  log "Prüfe Dienst ..."
-  systemctl --no-pager --full status "$SERVICE" || true
-  if curl -fsS --max-time 10 "http://127.0.0.1:${WEB_PORT}/health" >/dev/null; then
-    log "Installation erfolgreich. WebGUI: http://$(hostname -I | awk '{print $1}'):${WEB_PORT}"
+  log "Prüfe Dienst und WebGUI ..."
+  if wait_for_health; then
+    local address
+    address="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    log "Installation erfolgreich. WebGUI: http://${address:-SERVER-IP}:${WEB_PORT}"
   else
-    log "Paket wurde installiert, aber der Health-Check antwortet noch nicht."
+    systemctl --no-pager --full status "$SERVICE" || true
+    log "Paket wurde installiert, aber der Health-Check antwortet nicht."
     log "Diagnose: journalctl -u ${SERVICE} -n 100 --no-pager"
     exit 2
   fi
@@ -115,7 +122,8 @@ install_or_update() {
 show_status() {
   dpkg-query -W -f='Paket: ${Package}\nVersion: ${Version}\nStatus: ${Status}\n' "$PACKAGE" 2>/dev/null || true
   systemctl --no-pager --full status "$SERVICE" || true
-  curl -fsS --max-time 5 "http://127.0.0.1:${WEB_PORT}/health" || true
+  printf '\nHealth-Check: '
+  curl -fsS --max-time 5 "http://127.0.0.1:${WEB_PORT}/health" || printf 'nicht erreichbar'
   printf '\n'
 }
 
