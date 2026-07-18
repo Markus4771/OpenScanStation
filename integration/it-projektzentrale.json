@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "project_id": "openscanstation",
+  "name": "OpenScanStation",
+  "description": "Zentrale Scannerplattform mit Kodak-i2600-Unterstützung über SANE",
+  "version": "0.3.0",
+  "service": "openscanstation.service",
+  "web": {
+    "scheme": "http",
+    "port": 8101,
+    "path": "/"
+  },
+  "healthcheck": {
+    "scheme": "http",
+    "port": 8101,
+    "path": "/health"
+  },
+  "version_endpoint": {
+    "scheme": "http",
+    "port": 8101,
+    "path": "/version"
+  },
+  "api": {
+    "scanners": "/api/scanners"
+  }
+}
