@@ -37,11 +37,10 @@ jobs:
             python3-pil \
             python3-usb
 
-      - name: Check sources and installer
+      - name: Check Python and shell sources
         run: |
           python3 -m compileall -q openscanstation plugins
-          bash -n scripts/build_deb.sh
-          bash -n install.sh
+          bash -n install.sh scripts/build_deb.sh scripts/build_release.sh scripts/backup.sh
 
       - name: Check version consistency
         shell: bash
@@ -66,10 +65,10 @@ jobs:
             }
           fi
 
-      - name: Build Debian package
+      - name: Build Debian release package
         run: |
-          chmod +x scripts/build_deb.sh
-          ./scripts/build_deb.sh
+          chmod +x scripts/build_deb.sh scripts/build_release.sh scripts/backup.sh
+          ./scripts/build_release.sh
 
       - name: Validate package metadata and contents
         shell: bash
@@ -85,6 +84,7 @@ jobs:
           dpkg-deb --contents "$DEB_FILE"
           dpkg-deb --contents "$DEB_FILE" | grep -q './lib/systemd/system/openscanstation.service'
           dpkg-deb --contents "$DEB_FILE" | grep -q './usr/bin/openscanstation-web'
+          dpkg-deb --contents "$DEB_FILE" | grep -q './usr/bin/openscanstation-backup'
 
       - name: Smoke-test packaged application
         shell: bash
@@ -97,6 +97,7 @@ jobs:
           cd build/package-smoke-test/opt/openscanstation
           PYTHONPATH=. python3 -m openscanstation --help
           PYTHONPATH=. python3 -m openscanstation.web --help
+          bash ../../usr/bin/openscanstation-backup --help
 
       - name: Create SHA256 checksum
         shell: bash
