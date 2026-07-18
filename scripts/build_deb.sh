@@ -16,7 +16,8 @@ mkdir -p \
   "$BUILD_DIR/lib/udev/rules.d" \
   "$BUILD_DIR/lib/systemd/system" \
   "$BUILD_DIR/usr/share/doc/openscanstation" \
-  "$BUILD_DIR/usr/share/it-projektzentrale/projects"
+  "$BUILD_DIR/usr/share/it-projektzentrale/projects" \
+  "$BUILD_DIR/var/lib/openscanstation/scans"
 
 cp -a "$ROOT_DIR/openscanstation" "$BUILD_DIR/opt/openscanstation/"
 cp -a "$ROOT_DIR/plugins" "$BUILD_DIR/opt/openscanstation/"
@@ -40,13 +41,16 @@ Architecture: $ARCH
 Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils
 Maintainer: Markus Ach
 Description: Modulare Scannerplattform mit WebGUI auf Port 8101
- OpenScanStation erkennt Scanner über Plugins, bietet Kodak-i2600-Diagnose,
- SANE-Scans sowie eine WebGUI und REST-Endpunkte auf TCP-Port 8101.
+ OpenScanStation erkennt Kodak- und Samsung-Scanner über Plugins, bietet
+ SANE-Scans, Download der erzeugten Dateien sowie REST-Endpunkte auf Port 8101.
 EOF
 
 cat > "$BUILD_DIR/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
+
+mkdir -p /var/lib/openscanstation/scans
+chmod 0750 /var/lib/openscanstation /var/lib/openscanstation/scans
 
 if command -v udevadm >/dev/null 2>&1; then
     udevadm control --reload-rules || true
@@ -108,13 +112,14 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/tmp /var/tmp
+ReadWritePaths=/var/lib/openscanstation
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 find "$BUILD_DIR" -type d -exec chmod 0755 {} +
+chmod 0750 "$BUILD_DIR/var/lib/openscanstation" "$BUILD_DIR/var/lib/openscanstation/scans"
 mkdir -p "$OUTPUT_DIR"
 dpkg-deb --root-owner-group --build "$BUILD_DIR" "$OUTPUT_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
 
