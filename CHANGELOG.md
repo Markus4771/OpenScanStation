@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.2
+
+- Vollständige Sicherung aller produktiven Daten unter `/var/lib/openscanstation` ergänzt.
+- Sicherungen enthalten Scans, Dokumentendatenbank und Scanprofile.
+- SHA256-Prüfsummen für Sicherungsarchive ergänzt.
+- Sichere Wiederherstellung mit Archivprüfung gegen absolute Pfade und Pfadnavigation ergänzt.
+- Vor jeder Wiederherstellung wird automatisch eine Rückfallsicherung erzeugt.
+- Neues Konsolenwerkzeug `openscanstation-backup` mit `create`, `list`, `restore` und `help` ergänzt.
+- Release-Build erweitert, sodass das Sicherungswerkzeug Bestandteil des DEB-Pakets ist.
+- GitHub Actions prüft Shell-Skripte und kontrolliert den Paketinhalt auf das Sicherungswerkzeug.
+
 ## 0.4.1
 
 - Konsolen-Installer `install.sh` ergänzt.
