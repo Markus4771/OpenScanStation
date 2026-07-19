@@ -20,35 +20,44 @@ from openscanstation.scanner.scan import ScanJob, ScanResult
 
 _DEVICE_PATTERN = re.compile(r"device `(?P<device>[^']+)' is a (?P<label>.+)")
 _MODE_MAP = {"color": "Color", "gray": "Gray", "lineart": "Lineart"}
+_DISCOVERY_TIMEOUT_SECONDS = 45
 
 
 class SamsungAirScanPlugin(ScannerPlugin):
     plugin_id = "samsung_airscan"
 
-    def discover(self) -> list[ScannerInfo]:
+    @staticmethod
+    def _discover_output() -> str:
+        """Liefert die SANE-Geräteliste mit ausreichend Zeit für WSD/AirScan."""
         try:
             result = subprocess.run(
                 ["scanimage", "-L"],
                 check=True,
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=_DISCOVERY_TIMEOUT_SECONDS,
             )
-        except FileNotFoundError:
-            return []
-        except subprocess.TimeoutExpired:
-            return []
-        except subprocess.SubprocessError:
-            return []
+        except FileNotFoundError as exc:
+            raise RuntimeError("scanimage ist nicht installiert") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "Samsung-AirScan-Erkennung hat nach 45 Sekunden nicht geantwortet"
+            ) from exc
+        except subprocess.CalledProcessError as exc:
+            message = (exc.stderr or exc.stdout or "unbekannter SANE-Fehler").strip()
+            raise RuntimeError(f"Samsung-AirScan-Erkennung fehlgeschlagen: {message}") from exc
+        return result.stdout
 
+    def discover(self) -> list[ScannerInfo]:
         scanners: list[ScannerInfo] = []
-        for line in result.stdout.splitlines():
+        for line in self._discover_output().splitlines():
             match = _DEVICE_PATTERN.search(line.strip())
             if not match:
                 continue
             device_name = match.group("device")
             label = match.group("label")
-            if "samsung" not in label.lower() and "samsung" not in device_name.lower():
+            searchable = f"{device_name} {label}".lower()
+            if "samsung" not in searchable:
                 continue
             scanners.append(
                 ScannerInfo(
@@ -115,6 +124,9 @@ class SamsungAirScanPlugin(ScannerPlugin):
             except subprocess.CalledProcessError as exc:
                 message = exc.stderr.decode("utf-8", errors="replace").strip()
                 raise RuntimeError(f"Scan fehlgeschlagen: {message}") from exc
+
+            if not temp_png.exists() or temp_png.stat().st_size == 0:
+                raise RuntimeError("Der Samsung-Scanner hat keine Bilddaten geliefert")
 
             suffix = output.suffix.lower()
             if suffix == ".png":
