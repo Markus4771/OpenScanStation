@@ -13,7 +13,14 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from openscanstation.cli import VERSION
 from openscanstation.documents import SCAN_DIR, add_document, list_documents, run_ocr
-from openscanstation.profiles import load_profiles
+from openscanstation.profiles import (
+    ALLOWED_DPI,
+    ALLOWED_FORMATS,
+    ALLOWED_MODES,
+    delete_profile,
+    load_profiles,
+    upsert_profile,
+)
 from openscanstation.scanner.manager import ScannerManager
 from openscanstation.scanner_actions import action_by_id, load_actions, save_actions
 from openscanstation.scanner_cache import ScannerCache
@@ -75,16 +82,18 @@ def _find_scanner(scanner_id: str):
 
 def _perform_scan(form: dict[str, list[str]]) -> dict:
     scanner_id = form.get("scanner_id", [""])[0]
-    profile_id = form.get("profile", ["dokument"])[0]
+    requested_profile_id = form.get("profile", ["dokument"])[0]
     profiles = load_profiles()
-    profile = profiles.get(profile_id, profiles.get("dokument", {}))
+    default_profile_id = "dokument" if "dokument" in profiles else next(iter(profiles))
+    profile_id = requested_profile_id if requested_profile_id in profiles else default_profile_id
+    profile = profiles[profile_id]
     dpi = int(form.get("dpi", [str(profile.get("dpi", 300))])[0])
     mode = form.get("mode", [str(profile.get("mode", "color"))])[0]
     output_format = form.get("format", [str(profile.get("format", "pdf"))])[0].lower()
     title = form.get("title", [profile.get("label", "Dokument")])[0].strip() or "Dokument"
     tags = [x.strip() for x in form.get("tags", [""])[0].split(",") if x.strip()]
     do_ocr = form.get("ocr", ["0"])[0] == "1" or bool(profile.get("ocr"))
-    if output_format not in {"pdf", "png", "jpg"}:
+    if output_format not in ALLOWED_FORMATS:
         raise ValueError("Ungültiges Ausgabeformat")
     scanner, plugin = _find_scanner(scanner_id)
     if scanner is None or plugin is None:
@@ -98,7 +107,9 @@ def _perform_scan(form: dict[str, list[str]]) -> dict:
     target = SCAN_DIR / filename
     with _SCAN_LOCK:
         result = plugin.start_scan(scanner.connection, {
-            "output": str(target), "dpi": dpi, "mode": mode,
+            "output": str(target),
+            "dpi": dpi,
+            "mode": mode,
             "duplex": bool(profile.get("duplex")),
         })
     add_document(filename, title, scanner.name, profile_id, output_format, 1, tags)
@@ -110,8 +121,11 @@ def _perform_scan(form: dict[str, list[str]]) -> dict:
             ocr_error = str(exc)
     _SCANNER_CACHE.request_refresh()
     return {
-        "ok": True, "filename": filename, "bytes": result.bytes_written,
-        "download_url": f"/scans/{quote(filename)}", "ocr_error": ocr_error,
+        "ok": True,
+        "filename": filename,
+        "bytes": result.bytes_written,
+        "download_url": f"/scans/{quote(filename)}",
+        "ocr_error": ocr_error,
     }
 
 
@@ -132,7 +146,7 @@ def _layout(content: str, title: str = "OpenScanStation", notice: str = "", erro
     note = f'<div class="notice {"error" if error else "success"}">{html.escape(notice)}</div>' if notice else ""
     return f'''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(title)}</title><style>
-body{{font-family:system-ui,sans-serif;margin:0;background:#f3f5f7;color:#17202a}}header{{background:#17202a;color:#fff;padding:1.25rem 2rem}}header h1{{margin:0}}nav{{margin-top:.8rem}}nav a{{color:#fff;margin-right:1rem;text-decoration:none}}main{{max-width:1200px;margin:1.5rem auto;padding:0 1rem}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}}.card,.panel{{background:#fff;border-radius:12px;padding:1.2rem;box-shadow:0 2px 12px #0001;margin-bottom:1rem}}.ready,.warning{{padding:.25rem .55rem;border-radius:999px;font-weight:700;font-size:.85rem}}.ready{{background:#d5f5e3;color:#196f3d}}.warning{{background:#fdebd0;color:#935116}}.headline{{display:flex;justify-content:space-between;gap:1rem;align-items:center}}form{{display:grid;gap:.8rem}}.form-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.8rem}}label{{display:grid;gap:.3rem;font-weight:700}}input,select,button{{padding:.7rem;border:1px solid #bcc5cc;border-radius:8px;background:#fff}}input[type=checkbox]{{width:auto}}button{{background:#17202a;color:#fff;font-weight:700;cursor:pointer}}table{{width:100%;border-collapse:collapse}}th,td{{padding:.65rem;border-bottom:1px solid #e5e8eb;text-align:left;vertical-align:top}}.notice{{padding:1rem;border-radius:8px;margin-bottom:1rem}}.success{{background:#d5f5e3}}.error{{background:#fadbd8}}code{{overflow-wrap:anywhere}}.muted{{color:#65727e;font-size:.9rem}}.metric{{font-size:1.6rem;font-weight:800;margin:.2rem 0}}progress{{width:100%;height:1.1rem}}.inline-form{{display:inline-block;margin:0}}.action-card{{border-left:5px solid #65727e}}
+body{{font-family:system-ui,sans-serif;margin:0;background:#f3f5f7;color:#17202a}}header{{background:#17202a;color:#fff;padding:1.25rem 2rem}}header h1{{margin:0}}nav{{margin-top:.8rem}}nav a{{color:#fff;margin-right:1rem;text-decoration:none}}main{{max-width:1200px;margin:1.5rem auto;padding:0 1rem}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}}.card,.panel{{background:#fff;border-radius:12px;padding:1.2rem;box-shadow:0 2px 12px #0001;margin-bottom:1rem}}.ready,.warning{{padding:.25rem .55rem;border-radius:999px;font-weight:700;font-size:.85rem}}.ready{{background:#d5f5e3;color:#196f3d}}.warning{{background:#fdebd0;color:#935116}}.headline{{display:flex;justify-content:space-between;gap:1rem;align-items:center}}form{{display:grid;gap:.8rem}}.form-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.8rem}}label{{display:grid;gap:.3rem;font-weight:700}}input,select,button{{padding:.7rem;border:1px solid #bcc5cc;border-radius:8px;background:#fff}}input[type=checkbox]{{width:auto}}button{{background:#17202a;color:#fff;font-weight:700;cursor:pointer}}button.danger{{background:#922b21}}table{{width:100%;border-collapse:collapse}}th,td{{padding:.65rem;border-bottom:1px solid #e5e8eb;text-align:left;vertical-align:top}}.notice{{padding:1rem;border-radius:8px;margin-bottom:1rem}}.success{{background:#d5f5e3}}.error{{background:#fadbd8}}code{{overflow-wrap:anywhere}}.muted{{color:#65727e;font-size:.9rem}}.metric{{font-size:1.6rem;font-weight:800;margin:.2rem 0}}progress{{width:100%;height:1.1rem}}.inline-form{{display:inline-block;margin:0}}.action-card{{border-left:5px solid #65727e}}.profile-card{{border-left:5px solid #2e86c1}}.button-row{{display:flex;gap:.7rem;flex-wrap:wrap;align-items:center}}.button-row form{{display:inline-block;margin:0}}
 </style></head><body><header><h1>OpenScanStation</h1><div>Version {VERSION} · Port {DEFAULT_PORT}</div><nav><a href="/">Dashboard</a><a href="/documents">Dokumente</a><a href="/profiles">Scanprofile</a><a href="/scanner-actions">Scanneraktionen</a><a href="/system">System</a><a href="/api/scanners">API</a></nav></header><main>{note}{content}</main></body></html>'''
 
 
@@ -151,7 +165,7 @@ def _dashboard(message: str = "", error: bool = False) -> str:
         text = "Scannerstatus wird im Hintergrund geladen." if not payload.get("cache_ready") else "Kein Scanner gefunden. USB-Passthrough, Netzwerk und Treiber prüfen."
         cards = [f"<article class='card'><h2>Scanner</h2><p>{html.escape(text)}</p></article>"]
     profile_options = ''.join(f'<option value="{html.escape(k)}">{html.escape(v.get("label", k))}</option>' for k, v in profiles.items())
-    dpi_options = ''.join(f'<option value="{d}" {"selected" if d == 300 else ""}>{d} dpi</option>' for d in sorted(dpis or {150, 200, 300, 600}))
+    dpi_options = ''.join(f'<option value="{d}" {"selected" if d == 300 else ""}>{d} dpi</option>' for d in sorted(dpis or set(ALLOWED_DPI)))
     form = "<p>Kein scanfähiger Scanner verfügbar.</p>"
     action_buttons = ""
     if options:
@@ -167,7 +181,8 @@ def _dashboard(message: str = "", error: bool = False) -> str:
 def _scanner_actions_page(message: str = "", error: bool = False) -> str:
     data = load_actions()
     profiles = load_profiles()
-    profile_options = lambda selected: ''.join(f'<option value="{html.escape(pid)}" {"selected" if pid == selected else ""}>{html.escape(p.get("label", pid))}</option>' for pid, p in profiles.items())
+    def profile_options(selected: str) -> str:
+        return ''.join(f'<option value="{html.escape(pid)}" {"selected" if pid == selected else ""}>{html.escape(p.get("label", pid))}</option>' for pid, p in profiles.items())
     cards = []
     for action in data["actions"]:
         checked = "checked" if action.get("enabled") else ""
@@ -182,11 +197,14 @@ def _save_action(form: dict[str, list[str]]) -> dict:
         raise ValueError("Ungültiger Funktionsplatz")
     data = load_actions()
     action = next(item for item in data["actions"] if item["slot"] == slot)
+    selected_profile = form.get("profile", [action["profile"]])[0]
+    if selected_profile not in load_profiles():
+        raise ValueError("Das gewählte Scanprofil existiert nicht")
     action.update({
         "enabled": form.get("enabled", ["0"])[0] == "1",
         "label": form.get("label", [action["label"]])[0],
         "title": form.get("title", [action["title"]])[0],
-        "profile": form.get("profile", [action["profile"]])[0],
+        "profile": selected_profile,
         "tags": [x.strip() for x in form.get("tags", [""])[0].split(",") if x.strip()],
         "destination": form.get("destination", ["local"])[0],
         "post_action": form.get("post_action", ["none"])[0],
@@ -194,17 +212,62 @@ def _save_action(form: dict[str, list[str]]) -> dict:
     return save_actions(data)
 
 
+def _profile_values(form: dict[str, list[str]]) -> dict:
+    return {
+        "label": form.get("label", [""])[0],
+        "dpi": form.get("dpi", ["300"])[0],
+        "mode": form.get("mode", ["color"])[0],
+        "format": form.get("format", ["pdf"])[0],
+        "ocr": form.get("ocr", ["0"])[0] == "1",
+        "duplex": form.get("duplex", ["0"])[0] == "1",
+    }
+
+
+def _profile_form_fields(profile_id: str, profile: dict, *, include_id: bool) -> str:
+    id_field = f'<label>Profil-ID<input name="profile_id" maxlength="32" pattern="[a-z0-9][a-z0-9_-]*" value="{html.escape(profile_id, quote=True)}" required><span class="muted">z. B. buchhaltung oder foto_hoch</span></label>' if include_id else f'<input type="hidden" name="profile_id" value="{html.escape(profile_id, quote=True)}"><p><b>Profil-ID:</b> <code>{html.escape(profile_id)}</code></p>'
+    dpi_options = ''.join(f'<option value="{dpi}" {"selected" if dpi == int(profile.get("dpi", 300)) else ""}>{dpi} dpi</option>' for dpi in ALLOWED_DPI)
+    mode_labels = {"color": "Farbe", "gray": "Graustufen", "lineart": "Schwarz/Weiß"}
+    mode_options = ''.join(f'<option value="{mode}" {"selected" if mode == profile.get("mode") else ""}>{mode_labels[mode]}</option>' for mode in ALLOWED_MODES)
+    format_labels = {"pdf": "PDF", "png": "PNG", "jpg": "JPEG"}
+    format_options = ''.join(f'<option value="{fmt}" {"selected" if fmt == profile.get("format") else ""}>{format_labels[fmt]}</option>' for fmt in ALLOWED_FORMATS)
+    ocr_checked = "checked" if profile.get("ocr") else ""
+    duplex_checked = "checked" if profile.get("duplex") else ""
+    return f'''{id_field}<label>Anzeigename<input name="label" maxlength="80" value="{html.escape(str(profile.get('label', '')), quote=True)}" required></label><div class="form-grid"><label>Auflösung<select name="dpi">{dpi_options}</select></label><label>Farbmodus<select name="mode">{mode_options}</select></label><label>Ausgabeformat<select name="format">{format_options}</select></label><label><span>OCR aktivieren</span><input type="checkbox" name="ocr" value="1" {ocr_checked}></label><label><span>Duplex verwenden</span><input type="checkbox" name="duplex" value="1" {duplex_checked}></label></div>'''
+
+
+def _profiles_page(message: str = "", error: bool = False) -> str:
+    profiles = load_profiles()
+    actions = load_actions()["actions"]
+    cards = []
+    for profile_id, profile in profiles.items():
+        used_by = [str(a.get("label") or f"Funktion {a.get('slot')}") for a in actions if a.get("profile") == profile_id]
+        usage = f'<p class="muted">Verwendet von: {html.escape(", ".join(used_by))}</p>' if used_by else '<p class="muted">Aktuell keiner Scanneraktion zugeordnet.</p>'
+        delete_area = '<p class="muted">Zum Löschen zuerst die zugeordneten Scanneraktionen auf ein anderes Profil umstellen.</p>' if used_by else f'''<form method="post" action="/profiles/delete"><input type="hidden" name="profile_id" value="{html.escape(profile_id, quote=True)}"><button class="danger" type="submit">Profil löschen</button></form>'''
+        cards.append(f'''<article class="card profile-card"><h2>{html.escape(profile.get('label', profile_id))}</h2>{usage}<form method="post" action="/profiles/save">{_profile_form_fields(profile_id, profile, include_id=False)}<button type="submit">Änderungen speichern</button></form><div class="button-row">{delete_area}</div></article>''')
+    new_defaults = {"label": "Neues Profil", "dpi": 300, "mode": "color", "format": "pdf", "ocr": True, "duplex": False}
+    create = f'''<section class="panel"><h2>Neues Scanprofil hinzufügen</h2><form method="post" action="/profiles/create">{_profile_form_fields('', new_defaults, include_id=True)}<button type="submit">Profil hinzufügen</button></form></section>'''
+    info = '<section class="panel"><h2>Scanprofile verwalten</h2><p>Profile bestimmen Auflösung, Farbmodus, Dateiformat, OCR und Duplex. Änderungen stehen sofort im Dashboard und bei den Scanneraktionen zur Verfügung.</p><p class="muted">Speicherort: <code>/var/lib/openscanstation/profiles.json</code></p></section>'
+    return _layout(info + create + '<div class="grid">' + ''.join(cards) + '</div>', "Scanprofile", message, error)
+
+
+def _save_profile_from_form(form: dict[str, list[str]], *, create_only: bool) -> dict:
+    profile_id = form.get("profile_id", [""])[0]
+    return upsert_profile(profile_id, _profile_values(form), create_only=create_only)
+
+
+def _delete_profile_from_form(form: dict[str, list[str]]) -> dict:
+    profile_id = form.get("profile_id", [""])[0]
+    used_by = [a for a in load_actions()["actions"] if a.get("profile") == profile_id]
+    if used_by:
+        raise ValueError("Das Profil wird noch von einer Scanneraktion verwendet")
+    return delete_profile(profile_id)
+
+
 def _documents_page(query: str = "", message: str = "", error: bool = False) -> str:
     docs = list_documents(query=query)
     rows = ''.join(f'''<tr><td><a href="/scans/{quote(d['filename'])}">{html.escape(d['title'])}</a><div class="muted">{html.escape(d['filename'])}</div></td><td>{html.escape(d['scanner'])}</td><td>{html.escape(', '.join(d['tags']))}</td><td>{html.escape(d['ocr_status'])}</td><td><form method="post" action="/ocr"><input type="hidden" name="filename" value="{html.escape(d['filename'], quote=True)}"><button>OCR starten</button></form></td></tr>''' for d in docs) or '<tr><td colspan="5">Keine Treffer.</td></tr>'
     content = f'''<section class="panel"><h2>Dokumentensuche</h2><form method="get" action="/documents"><div class="form-grid"><label>Suchbegriff<input name="q" value="{html.escape(query, quote=True)}" placeholder="Titel, Tag oder OCR-Text"></label></div><button>Suchen</button></form></section><section class="panel"><table><tr><th>Dokument</th><th>Scanner</th><th>Tags</th><th>OCR</th><th>Aktion</th></tr>{rows}</table></section>'''
     return _layout(content, "Dokumente", message, error)
-
-
-def _profiles_page() -> str:
-    profiles = load_profiles()
-    rows = ''.join(f'<tr><td>{html.escape(v.get("label", k))}</td><td>{v.get("dpi", 300)}</td><td>{html.escape(v.get("mode", "color"))}</td><td>{html.escape(v.get("format", "pdf"))}</td><td>{"Ja" if v.get("ocr") else "Nein"}</td><td>{"Ja" if v.get("duplex") else "Nein"}</td></tr>' for k, v in profiles.items())
-    return _layout(f'<section class="panel"><h2>Scanprofile</h2><p>Konfiguration: <code>/var/lib/openscanstation/profiles.json</code></p><table><tr><th>Profil</th><th>DPI</th><th>Modus</th><th>Format</th><th>OCR</th><th>Duplex</th></tr>{rows}</table></section>', "Scanprofile")
 
 
 def _system_page() -> str:
@@ -238,53 +301,90 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
-        if path == "/": self._html(_dashboard())
-        elif path == "/documents": self._html(_documents_page(parse_qs(parsed.query).get("q", [""])[0]))
-        elif path == "/profiles": self._html(_profiles_page())
-        elif path == "/scanner-actions": self._html(_scanner_actions_page())
-        elif path == "/system": self._html(_system_page())
-        elif path == "/health": self._json({"status": "ok", "service": "openscanstation", "version": VERSION, "port": DEFAULT_PORT})
-        elif path == "/version": self._json({"version": VERSION})
-        elif path == "/api/scanners": self._json(_scanner_payload())
-        elif path == "/api/scanner-actions": self._json(load_actions())
-        elif path == "/api/documents": self._json({"documents": list_documents(parse_qs(parsed.query).get("q", [""])[0])})
-        elif path == "/api/system": self._json({"version": VERSION, **system_payload()})
+        if path == "/":
+            self._html(_dashboard())
+        elif path == "/documents":
+            self._html(_documents_page(parse_qs(parsed.query).get("q", [""])[0]))
+        elif path == "/profiles":
+            self._html(_profiles_page())
+        elif path == "/scanner-actions":
+            self._html(_scanner_actions_page())
+        elif path == "/system":
+            self._html(_system_page())
+        elif path == "/health":
+            self._json({"status": "ok", "service": "openscanstation", "version": VERSION, "port": DEFAULT_PORT})
+        elif path == "/version":
+            self._json({"version": VERSION})
+        elif path == "/api/scanners":
+            self._json(_scanner_payload())
+        elif path == "/api/scanner-actions":
+            self._json(load_actions())
+        elif path == "/api/profiles":
+            self._json({"profiles": load_profiles()})
+        elif path == "/api/documents":
+            self._json({"documents": list_documents(parse_qs(parsed.query).get("q", [""])[0])})
+        elif path == "/api/system":
+            self._json({"version": VERSION, **system_payload()})
         elif path.startswith("/scans/"):
             name = unquote(path.removeprefix("/scans/"))
-            if not _SAFE_FILE.fullmatch(name): return self._json({"error": "invalid_filename"}, HTTPStatus.BAD_REQUEST)
+            if not _SAFE_FILE.fullmatch(name):
+                return self._json({"error": "invalid_filename"}, HTTPStatus.BAD_REQUEST)
             target = SCAN_DIR / name
-            if not target.is_file(): return self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
+            if not target.is_file():
+                return self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
             types = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
             self._send(target.read_bytes(), types.get(target.suffix.lower(), "application/octet-stream"), disposition=f'inline; filename="{target.name}"')
-        else: self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
+        else:
+            self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
 
     def do_POST(self):
         path = urlparse(self.path).path
         try:
             if path == "/refresh-scanners":
                 _SCANNER_CACHE.request_refresh()
-                self._html(_dashboard("Scanneraktualisierung wurde im Hintergrund gestartet.")); return
+                self._html(_dashboard("Scanneraktualisierung wurde im Hintergrund gestartet."))
+                return
             length = int(self.headers.get("Content-Length", "0"))
-            if length <= 0 or length > 65536: raise ValueError("Ungültige Formulardaten")
-            form = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=False)
+            if length <= 0 or length > 65536:
+                raise ValueError("Ungültige Formulardaten")
+            form = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=True)
             if path == "/scan":
                 result = _perform_scan(form)
                 msg = f"Scan erfolgreich: {result['filename']}" + (f"; OCR-Hinweis: {result['ocr_error']}" if result["ocr_error"] else "")
-                self._html(_dashboard(msg)); return
+                self._html(_dashboard(msg))
+                return
             if path == "/run-action":
                 result = _perform_action(form.get("scanner_id", [""])[0], form.get("action_id", [""])[0])
-                self._html(_dashboard(f"Scanneraktion erfolgreich: {result['filename']}")); return
+                self._html(_dashboard(f"Scanneraktion erfolgreich: {result['filename']}"))
+                return
             if path == "/scanner-actions/save":
                 _save_action(form)
-                self._html(_scanner_actions_page("Scanneraktion wurde gespeichert.")); return
+                self._html(_scanner_actions_page("Scanneraktion wurde gespeichert."))
+                return
+            if path == "/profiles/create":
+                _save_profile_from_form(form, create_only=True)
+                self._html(_profiles_page("Scanprofil wurde hinzugefügt."))
+                return
+            if path == "/profiles/save":
+                _save_profile_from_form(form, create_only=False)
+                self._html(_profiles_page("Scanprofil wurde gespeichert."))
+                return
+            if path == "/profiles/delete":
+                _delete_profile_from_form(form)
+                self._html(_profiles_page("Scanprofil wurde gelöscht."))
+                return
             if path == "/ocr":
                 filename = form.get("filename", [""])[0]
-                if not _SAFE_FILE.fullmatch(filename): raise ValueError("Ungültiger Dateiname")
+                if not _SAFE_FILE.fullmatch(filename):
+                    raise ValueError("Ungültiger Dateiname")
                 run_ocr(filename)
-                self._html(_documents_page(message=f"OCR abgeschlossen: {filename}")); return
+                self._html(_documents_page(message=f"OCR abgeschlossen: {filename}"))
+                return
             self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
         except Exception as exc:
-            if path.startswith("/scanner-actions"):
+            if path.startswith("/profiles"):
+                page = _profiles_page(str(exc), True)
+            elif path.startswith("/scanner-actions"):
                 page = _scanner_actions_page(str(exc), True)
             elif path == "/ocr":
                 page = _documents_page(message=str(exc), error=True)
