@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.4
+
+- Scanprofile können jetzt direkt in der WebGUI bearbeitet werden.
+- Neue Scanprofile können mit eigener Profil-ID und eigenem Anzeigenamen hinzugefügt werden.
+- Auflösung, Farbmodus, Ausgabeformat, OCR und Duplex sind je Profil konfigurierbar.
+- Scanprofile können gelöscht werden, sofern sie nicht mehr von einer Scanneraktion verwendet werden.
+- Das letzte verbleibende Scanprofil ist gegen Löschen geschützt.
+- Profilwerte werden validiert und atomar unter `/var/lib/openscanstation/profiles.json` gespeichert.
+- Neuer REST-Endpunkt `/api/profiles` ergänzt.
+- Dashboard und Scanneraktionen verwenden neu angelegte oder geänderte Profile unmittelbar.
+- Automatisierte Tests für Anlegen, Bearbeiten, Löschen und ungültige Profilwerte ergänzt.
+
 ## 0.5.3
 
 - Samsung-AirScan-Erkennung robuster gemacht.
