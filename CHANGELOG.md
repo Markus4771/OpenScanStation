@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1
+
+- Gerätebezogene Energieeinstellungen unter `/var/lib/openscanstation/device_settings.json` ergänzt.
+- Konfigurierbare Standby-Zeit für Kodak i2600 von 0 bis 240 Minuten ergänzt.
+- Kodak-Plugin erkennt automatisch SANE-Optionen wie `sleep-timer`, `standby-time`, `power-save` oder `energy-star`.
+- Die konfigurierte Standby-Zeit wird bei Kodak-Scans an den Treiber übergeben, sofern dieser eine passende Option anbietet.
+- Scannerstatus zeigt, ob der installierte Kodak-Treiber die Standby-Steuerung unterstützt.
+- Neues Werkzeug `openscanstation-kodak-standby` zur Konfiguration ergänzt.
+- Release-Paket enthält das neue Kodak-Standby-Werkzeug.
+
 ## 0.5.0
 
 - Herstellerunabhängiges Modell für konfigurierbare Scanneraktionen ergänzt.
