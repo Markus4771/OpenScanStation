@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.5
+
+- Kodak-KDS-Laufzeitadapter ergänzt, der das Gerät vor einem Scan nicht mehrfach öffnet.
+- Scannerstatus und Optionsabfrage öffnen den proprietären Kodak-Treiber nicht mehr unmittelbar vor dem Scan.
+- Scannererkennung und Scanauftrag werden gegen parallele Gerätezugriffe vorbereitet.
+- Scanprofile steuern jetzt Auflösung, Farbmodus, Ausgabeformat, OCR und Duplex vollständig.
+- Feste Werte der freien Scanmaske überschreiben das ausgewählte Scanprofil nicht mehr.
+- Kodak-Duplexprofile werden auf die KDS-Quelle `ADF Duplex` abgebildet.
+- Scanner werden in Auswahllisten kurz als `Kodak i2600` und `Samsung C48x` angezeigt.
+- Breite Scanner-Auswahllisten werden auf die Kartenbreite begrenzt.
+- Dashboard wird regelmäßig neu geladen und zeigt die automatische Hintergrund-Erkennung ohne manuelle Suche an.
+- Verständlichere Diagnose für den KDS-Fehler `open of device ... Invalid argument` ergänzt.
+
 ## 0.5.4
 
 - Scanprofile können jetzt direkt in der WebGUI bearbeitet werden.
