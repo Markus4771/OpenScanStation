@@ -1,5 +1,4 @@
-"""Kodak-i2600-Plugin mit produktivem SANE-Pfad und USB-Diagnose-Fallback."""
-
+"""Kodak-i2600-Plugin mit SANE, Standby-Steuerung und USB-Diagnose."""
 from __future__ import annotations
 
 import re
@@ -10,6 +9,7 @@ from pathlib import Path
 import usb.core
 from PIL import Image
 
+from openscanstation.device_settings import get_device_setting
 from openscanstation.scanner.base import (
     ScannerCapabilities,
     ScannerInfo,
@@ -20,6 +20,7 @@ from openscanstation.scanner.base import (
 from openscanstation.scanner.scan import ScanJob, ScanResult
 
 _DEVICE_PATTERN = re.compile(r"device `(?P<device>[^']+)' is a (?P<label>.+)")
+_OPTION_PATTERN = re.compile(r"--(?P<name>[a-zA-Z0-9][a-zA-Z0-9_-]*)")
 _MODE_CANDIDATES = {
     "color": ("Color", "24bit Color", "Colour"),
     "gray": ("Gray", "Grayscale", "8bit Gray"),
@@ -30,6 +31,17 @@ _SOURCE_CANDIDATES = (
     "ADF Duplex",
     "ADF Front",
     "ADF",
+)
+_STANDBY_OPTION_CANDIDATES = (
+    "sleep-timer",
+    "sleep-time",
+    "standby-time",
+    "standby-timer",
+    "power-save-time",
+    "power-save",
+    "powersave-time",
+    "energy-star-time",
+    "energy-star",
 )
 
 
@@ -101,11 +113,33 @@ class KodakI2600Plugin(ScannerPlugin):
                 return candidate
         return None
 
+    @staticmethod
+    def _available_option_names(options_text: str) -> set[str]:
+        return {match.group("name").lower() for match in _OPTION_PATTERN.finditer(options_text)}
+
+    def _standby_option(self, options_text: str) -> str | None:
+        available = self._available_option_names(options_text)
+        return next((name for name in _STANDBY_OPTION_CANDIDATES if name in available), None)
+
+    def _standby_arguments(self, device_name: str, options_text: str) -> tuple[list[str], dict]:
+        setting = get_device_setting(f"{self.plugin_id}:{device_name}")
+        minutes = int(setting.get("standby_minutes", 15))
+        enabled = bool(setting.get("standby_enabled", True))
+        option = self._standby_option(options_text)
+        details = {
+            "standby_enabled": enabled,
+            "standby_minutes": minutes,
+            "standby_option": option,
+            "standby_supported": bool(option),
+        }
+        if not enabled or not option:
+            return [], details
+        return [f"--{option}", str(minutes)], details
+
     def discover(self) -> list[ScannerInfo]:
         sane_scanners = self._discover_sane()
         if sane_scanners:
             return sane_scanners
-
         device = usb.core.find(idVendor=self.vendor_id, idProduct=self.product_id)
         if device is None:
             return []
@@ -134,22 +168,33 @@ class KodakI2600Plugin(ScannerPlugin):
                 scanner.connection == device_name for scanner in self._discover_sane()
             )
             options = self._device_options(device_name) if connected else ""
+            _, standby = self._standby_arguments(device_name, options)
+            details = {
+                "driver_ready": connected,
+                "duplex_option_detected": "duplex" in options.lower(),
+                "adf_option_detected": "adf" in options.lower(),
+                **standby,
+            }
+            if connected and standby["standby_supported"]:
+                message = (
+                    "Kodak i2600 ist scanfähig; Standby nach "
+                    f"{standby['standby_minutes']} Minuten konfiguriert."
+                )
+            elif connected:
+                message = (
+                    "Kodak i2600 ist scanfähig. Der installierte Treiber bietet "
+                    "keine erkennbare Standby-Option an."
+                )
+            else:
+                message = "Kodak i2600 ist über SANE nicht erreichbar."
             return ScannerStatus(
                 device=device_name,
                 state=ScannerState.READY if connected else ScannerState.OFFLINE,
                 connected=connected,
                 backend="sane",
                 scan_supported=connected,
-                message=(
-                    "Kodak i2600 ist über den installierten SANE/Kodak-Treiber scanfähig."
-                    if connected
-                    else "Kodak i2600 ist über SANE nicht erreichbar."
-                ),
-                details={
-                    "driver_ready": connected,
-                    "duplex_option_detected": "duplex" in options.lower(),
-                    "adf_option_detected": "adf" in options.lower(),
-                },
+                message=message,
+                details=details,
             )
 
         device = usb.core.find(idVendor=self.vendor_id, idProduct=self.product_id)
@@ -161,9 +206,9 @@ class KodakI2600Plugin(ScannerPlugin):
             backend="libusb/pyusb",
             scan_supported=False,
             message=(
-                "USB-Passthrough funktioniert. Installiere jetzt den x86_64-Kodak/SANE-Treiber in der VM; danach muss 'scanimage -L' den i2600 anzeigen."
+                "USB-Passthrough funktioniert. Installiere den x86_64-Kodak/SANE-Treiber; danach muss 'scanimage -L' den i2600 anzeigen."
                 if connected
-                else "Kodak i2600 wurde nicht am USB-Bus der VM gefunden. Prüfe das Proxmox-USB-Passthrough."
+                else "Kodak i2600 wurde nicht am USB-Bus der VM gefunden."
             ),
             details={"protocol_state": "driver_required", "usb_id": "040a:601d"},
         )
@@ -171,7 +216,7 @@ class KodakI2600Plugin(ScannerPlugin):
     def start_scan(self, device_name: str, options: dict) -> ScanResult:
         if device_name.startswith("usb:"):
             raise RuntimeError(
-                "USB ist durchgereicht, aber der Scanner besitzt noch kein SANE-Gerät. Installiere den Kodak-x86_64-Treiber und prüfe 'scanimage -L'."
+                "USB ist durchgereicht, aber der Scanner besitzt noch kein SANE-Gerät."
             )
 
         output = Path(options["output"]).expanduser().resolve()
@@ -190,6 +235,7 @@ class KodakI2600Plugin(ScannerPlugin):
         options_text = self._device_options(job.device)
         selected_mode = self._pick_supported(options_text, _MODE_CANDIDATES[job.mode])
         selected_source = self._pick_supported(options_text, _SOURCE_CANDIDATES)
+        standby_args, _ = self._standby_arguments(job.device, options_text)
 
         output.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="openscanstation-kodak-") as temp_dir:
@@ -205,6 +251,7 @@ class KodakI2600Plugin(ScannerPlugin):
                 command.extend(["--mode", selected_mode])
             if selected_source:
                 command.extend(["--source", selected_source])
+            command.extend(standby_args)
             command.append("--format=png")
 
             try:
