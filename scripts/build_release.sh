@@ -24,12 +24,15 @@ install -D -m 0755 "$ROOT_DIR/scripts/kodak_standby.py" "$WORK_DIR/package/usr/b
 install -D -m 0755 "$ROOT_DIR/packaging/openscanstation-watchdog" "$WORK_DIR/package/usr/bin/openscanstation-watchdog"
 install -D -m 0644 "$ROOT_DIR/packaging/openscanstation-watchdog.service" "$WORK_DIR/package/lib/systemd/system/openscanstation-watchdog.service"
 install -D -m 0644 "$ROOT_DIR/packaging/openscanstation-watchdog.timer" "$WORK_DIR/package/lib/systemd/system/openscanstation-watchdog.timer"
+install -D -m 0755 "$ROOT_DIR/packaging/openscanstation-device-settings" "$WORK_DIR/package/usr/bin/openscanstation-device-settings"
+install -D -m 0644 "$ROOT_DIR/packaging/openscanstation-device-settings.service" "$WORK_DIR/package/lib/systemd/system/openscanstation-device-settings.service"
 install -d -m 0750 "$WORK_DIR/package/var/backups/openscanstation"
 
 cat >> "$WORK_DIR/package/DEBIAN/postinst" <<'EOF'
 if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload || true
     systemctl enable --now openscanstation-watchdog.timer || true
+    systemctl enable --now openscanstation-device-settings.service || true
 fi
 EOF
 
@@ -37,4 +40,4 @@ dpkg-deb --root-owner-group --build "$WORK_DIR/package" "$NEW_DEB"
 mv "$NEW_DEB" "$DEB_FILE"
 
 echo "Release-Paket erstellt: $DEB_FILE"
-echo "Enthalten: Backup, Kodak-Standby-Konfiguration und automatischer Health-Watchdog"
+echo "Enthalten: Backup, Kodak-Standby, Geräteeinstellungen auf Port 8102 und Health-Watchdog"
