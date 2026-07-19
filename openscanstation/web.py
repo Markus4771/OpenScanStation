@@ -15,6 +15,7 @@ from openscanstation.cli import VERSION
 from openscanstation.documents import SCAN_DIR, add_document, list_documents, run_ocr
 from openscanstation.profiles import load_profiles
 from openscanstation.scanner.manager import ScannerManager
+from openscanstation.scanner_actions import action_by_id, load_actions, save_actions
 from openscanstation.scanner_cache import ScannerCache
 from openscanstation.system_info import system_payload
 
@@ -25,7 +26,6 @@ _SAFE_FILE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
 def _discover_scanners() -> dict:
-    """Run the slow hardware discovery outside HTTP request handling."""
     manager = ScannerManager()
     result = manager.discover()
     scanners = []
@@ -62,12 +62,10 @@ _SCANNER_CACHE = ScannerCache(_discover_scanners, interval_seconds=10)
 
 
 def _scanner_payload() -> dict:
-    """Return immediately from cache; never probe hardware in a web request."""
     return {"version": VERSION, **_SCANNER_CACHE.snapshot()}
 
 
 def _find_scanner(scanner_id: str):
-    """Rediscover only when a real scan is started."""
     manager = ScannerManager()
     for scanner in manager.discover().scanners:
         if f"{scanner.plugin_id}:{scanner.connection}" == scanner_id:
@@ -117,20 +115,32 @@ def _perform_scan(form: dict[str, list[str]]) -> dict:
     }
 
 
+def _perform_action(scanner_id: str, action_id: str) -> dict:
+    action = action_by_id(action_id)
+    if not action or not action.get("enabled"):
+        raise ValueError("Scanneraktion ist nicht aktiviert")
+    form = {
+        "scanner_id": [scanner_id],
+        "profile": [action.get("profile", "dokument")],
+        "title": [action.get("title", action.get("label", "Dokument"))],
+        "tags": [", ".join(action.get("tags", []))],
+    }
+    return _perform_scan(form)
+
+
 def _layout(content: str, title: str = "OpenScanStation", notice: str = "", error: bool = False) -> str:
     note = f'<div class="notice {"error" if error else "success"}">{html.escape(notice)}</div>' if notice else ""
     return f'''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(title)}</title><style>
-body{{font-family:system-ui,sans-serif;margin:0;background:#f3f5f7;color:#17202a}}header{{background:#17202a;color:#fff;padding:1.25rem 2rem}}header h1{{margin:0}}nav{{margin-top:.8rem}}nav a{{color:#fff;margin-right:1rem;text-decoration:none}}main{{max-width:1200px;margin:1.5rem auto;padding:0 1rem}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}}.card,.panel{{background:#fff;border-radius:12px;padding:1.2rem;box-shadow:0 2px 12px #0001;margin-bottom:1rem}}.ready,.warning{{padding:.25rem .55rem;border-radius:999px;font-weight:700;font-size:.85rem}}.ready{{background:#d5f5e3;color:#196f3d}}.warning{{background:#fdebd0;color:#935116}}.headline{{display:flex;justify-content:space-between;gap:1rem;align-items:center}}form{{display:grid;gap:.8rem}}.form-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.8rem}}label{{display:grid;gap:.3rem;font-weight:700}}input,select,button{{padding:.7rem;border:1px solid #bcc5cc;border-radius:8px;background:#fff}}button{{background:#17202a;color:#fff;font-weight:700;cursor:pointer}}table{{width:100%;border-collapse:collapse}}th,td{{padding:.65rem;border-bottom:1px solid #e5e8eb;text-align:left;vertical-align:top}}.notice{{padding:1rem;border-radius:8px;margin-bottom:1rem}}.success{{background:#d5f5e3}}.error{{background:#fadbd8}}code{{overflow-wrap:anywhere}}.muted{{color:#65727e;font-size:.9rem}}.metric{{font-size:1.6rem;font-weight:800;margin:.2rem 0}}progress{{width:100%;height:1.1rem}}.inline-form{{display:inline-block;margin:0}}
-</style></head><body><header><h1>OpenScanStation</h1><div>Version {VERSION} · Port {DEFAULT_PORT}</div><nav><a href="/">Dashboard</a><a href="/documents">Dokumente</a><a href="/profiles">Scanprofile</a><a href="/system">System</a><a href="/api/scanners">API</a></nav></header><main>{note}{content}</main></body></html>'''
+body{{font-family:system-ui,sans-serif;margin:0;background:#f3f5f7;color:#17202a}}header{{background:#17202a;color:#fff;padding:1.25rem 2rem}}header h1{{margin:0}}nav{{margin-top:.8rem}}nav a{{color:#fff;margin-right:1rem;text-decoration:none}}main{{max-width:1200px;margin:1.5rem auto;padding:0 1rem}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}}.card,.panel{{background:#fff;border-radius:12px;padding:1.2rem;box-shadow:0 2px 12px #0001;margin-bottom:1rem}}.ready,.warning{{padding:.25rem .55rem;border-radius:999px;font-weight:700;font-size:.85rem}}.ready{{background:#d5f5e3;color:#196f3d}}.warning{{background:#fdebd0;color:#935116}}.headline{{display:flex;justify-content:space-between;gap:1rem;align-items:center}}form{{display:grid;gap:.8rem}}.form-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.8rem}}label{{display:grid;gap:.3rem;font-weight:700}}input,select,button{{padding:.7rem;border:1px solid #bcc5cc;border-radius:8px;background:#fff}}input[type=checkbox]{{width:auto}}button{{background:#17202a;color:#fff;font-weight:700;cursor:pointer}}table{{width:100%;border-collapse:collapse}}th,td{{padding:.65rem;border-bottom:1px solid #e5e8eb;text-align:left;vertical-align:top}}.notice{{padding:1rem;border-radius:8px;margin-bottom:1rem}}.success{{background:#d5f5e3}}.error{{background:#fadbd8}}code{{overflow-wrap:anywhere}}.muted{{color:#65727e;font-size:.9rem}}.metric{{font-size:1.6rem;font-weight:800;margin:.2rem 0}}progress{{width:100%;height:1.1rem}}.inline-form{{display:inline-block;margin:0}}.action-card{{border-left:5px solid #65727e}}
+</style></head><body><header><h1>OpenScanStation</h1><div>Version {VERSION} · Port {DEFAULT_PORT}</div><nav><a href="/">Dashboard</a><a href="/documents">Dokumente</a><a href="/profiles">Scanprofile</a><a href="/scanner-actions">Scanneraktionen</a><a href="/system">System</a><a href="/api/scanners">API</a></nav></header><main>{note}{content}</main></body></html>'''
 
 
 def _dashboard(message: str = "", error: bool = False) -> str:
     payload = _scanner_payload()
     profiles = load_profiles()
-    cards = []
-    options = []
-    dpis = set()
+    actions = [a for a in load_actions()["actions"] if a.get("enabled")]
+    cards, options, dpis = [], [], set()
     for scanner in payload["scanners"]:
         ready = scanner["connected"] and scanner["scan_supported"]
         cards.append(f'''<article class="card"><div class="headline"><h2>{html.escape(scanner['name'])}</h2><span class="{'ready' if ready else 'warning'}">{'Bereit' if ready else 'Prüfen'}</span></div><p><b>Backend:</b> {html.escape(scanner['backend'] or '-')}</p><p><b>Verbindung:</b> <code>{html.escape(scanner['connection'])}</code></p><p>{html.escape(scanner['message'])}</p></article>''')
@@ -143,15 +153,45 @@ def _dashboard(message: str = "", error: bool = False) -> str:
     profile_options = ''.join(f'<option value="{html.escape(k)}">{html.escape(v.get("label", k))}</option>' for k, v in profiles.items())
     dpi_options = ''.join(f'<option value="{d}" {"selected" if d == 300 else ""}>{d} dpi</option>' for d in sorted(dpis or {150, 200, 300, 600}))
     form = "<p>Kein scanfähiger Scanner verfügbar.</p>"
+    action_buttons = ""
     if options:
         form = f'''<form method="post" action="/scan"><div class="form-grid"><label>Titel<input name="title" value="Dokument"></label><label>Scanner<select name="scanner_id">{''.join(options)}</select></label><label>Profil<select name="profile">{profile_options}</select></label><label>Auflösung<select name="dpi">{dpi_options}</select></label><label>Farbmodus<select name="mode"><option value="color">Farbe</option><option value="gray">Graustufen</option><option value="lineart">Schwarz/Weiß</option></select></label><label>Format<select name="format"><option value="pdf">PDF</option><option value="png">PNG</option><option value="jpg">JPEG</option></select></label><label>Tags<input name="tags" placeholder="Rechnung, Kunde"></label><label>OCR<select name="ocr"><option value="1">Aktiv</option><option value="0">Aus</option></select></label></div><button type="submit">Scan starten</button></form>'''
+        action_buttons = ''.join(f'''<article class="card action-card"><h3>{a['slot']}: {html.escape(a['label'])}</h3><p>{html.escape(a['title'])} · Profil {html.escape(a['profile'])}</p><form method="post" action="/run-action"><label>Scanner<select name="scanner_id">{''.join(options)}</select></label><input type="hidden" name="action_id" value="{html.escape(a['id'], quote=True)}"><button>Aktion starten</button></form></article>''' for a in actions)
     docs = list_documents(limit=10)
     rows = ''.join(f'<tr><td><a href="/scans/{quote(d["filename"])}">{html.escape(d["title"])}</a></td><td>{html.escape(d["scanner"])}</td><td>{html.escape(d["created_at"])}</td><td>{html.escape(d["ocr_status"])}</td></tr>' for d in docs) or '<tr><td colspan="4">Noch keine Dokumente.</td></tr>'
     updated = html.escape(payload.get("updated_at") or "noch nicht abgeschlossen")
-    cache_note = f'<p class="muted">Scannerstatus: {updated} · automatische Aktualisierung alle 10 Sekunden</p>'
-    refresh = '<form class="inline-form" method="post" action="/refresh-scanners"><button type="submit">Scanner neu suchen</button></form>'
-    content = f'<section class="panel"><h2>Dokument scannen</h2>{form}</section><div class="headline"><h2>Scanner</h2>{refresh}</div>{cache_note}<div class="grid">{"".join(cards)}</div><section class="panel"><h2>Letzte Dokumente</h2><table><tr><th>Titel</th><th>Scanner</th><th>Zeit</th><th>OCR</th></tr>{rows}</table></section>'
+    content = f'<section class="panel"><h2>Schnellaktionen</h2><div class="grid">{action_buttons or "<p>Keine aktiven Scanneraktionen oder kein Scanner verfügbar.</p>"}</div></section><section class="panel"><h2>Freier Scan</h2>{form}</section><div class="headline"><h2>Scanner</h2><form class="inline-form" method="post" action="/refresh-scanners"><button>Scanner neu suchen</button></form></div><p class="muted">Scannerstatus: {updated} · automatische Aktualisierung alle 10 Sekunden</p><div class="grid">{"".join(cards)}</div><section class="panel"><h2>Letzte Dokumente</h2><table><tr><th>Titel</th><th>Scanner</th><th>Zeit</th><th>OCR</th></tr>{rows}</table></section>'
     return _layout(content, notice=message, error=error)
+
+
+def _scanner_actions_page(message: str = "", error: bool = False) -> str:
+    data = load_actions()
+    profiles = load_profiles()
+    profile_options = lambda selected: ''.join(f'<option value="{html.escape(pid)}" {"selected" if pid == selected else ""}>{html.escape(p.get("label", pid))}</option>' for pid, p in profiles.items())
+    cards = []
+    for action in data["actions"]:
+        checked = "checked" if action.get("enabled") else ""
+        cards.append(f'''<article class="card action-card"><h2>Funktion {action['slot']}</h2><form method="post" action="/scanner-actions/save"><input type="hidden" name="slot" value="{action['slot']}"><label><span>Aktiv</span><input type="checkbox" name="enabled" value="1" {checked}></label><label>Display-/Tastenname<input name="label" maxlength="32" value="{html.escape(action['label'], quote=True)}"></label><label>Dokumenttitel<input name="title" maxlength="120" value="{html.escape(action['title'], quote=True)}"></label><label>Scanprofil<select name="profile">{profile_options(action['profile'])}</select></label><label>Tags<input name="tags" value="{html.escape(', '.join(action.get('tags', [])), quote=True)}" placeholder="Rechnung, Eingang"></label><label>Ablageziel<input name="destination" value="{html.escape(action.get('destination', 'local'), quote=True)}"></label><label>Nachbearbeitung<input name="post_action" value="{html.escape(action.get('post_action', 'none'), quote=True)}"></label><button>Funktion speichern</button></form></article>''')
+    info = '''<section class="panel"><h2>Kodak und Samsung</h2><p>Die Aktionen sind herstellerunabhängig. Kodak-Funktionsplätze und unterstützte Samsung-Tasten können später auf diese Aktionen gelegt werden.</p><p class="muted">Die physische Tasten- und Displayanbindung hängt vom jeweiligen Treiber und Modell ab. Web-Schnellaktionen funktionieren bereits ohne Hardwaretasten.</p></section>'''
+    return _layout(info + '<div class="grid">' + ''.join(cards) + '</div>', "Scanneraktionen", message, error)
+
+
+def _save_action(form: dict[str, list[str]]) -> dict:
+    slot = int(form.get("slot", ["0"])[0])
+    if slot < 1 or slot > 9:
+        raise ValueError("Ungültiger Funktionsplatz")
+    data = load_actions()
+    action = next(item for item in data["actions"] if item["slot"] == slot)
+    action.update({
+        "enabled": form.get("enabled", ["0"])[0] == "1",
+        "label": form.get("label", [action["label"]])[0],
+        "title": form.get("title", [action["title"]])[0],
+        "profile": form.get("profile", [action["profile"]])[0],
+        "tags": [x.strip() for x in form.get("tags", [""])[0].split(",") if x.strip()],
+        "destination": form.get("destination", ["local"])[0],
+        "post_action": form.get("post_action", ["none"])[0],
+    })
+    return save_actions(data)
 
 
 def _documents_page(query: str = "", message: str = "", error: bool = False) -> str:
@@ -170,16 +210,7 @@ def _profiles_page() -> str:
 def _system_page() -> str:
     data = system_payload()
     backup_rows = ''.join(f'<tr><td>{html.escape(item["name"])}</td><td>{html.escape(item["size_human"])}</td><td>{"Ja" if item["checksum"] else "Nein"}</td></tr>' for item in data["backups"]) or '<tr><td colspan="3">Noch keine Sicherungen gefunden.</td></tr>'
-    content = f'''
-    <div class="grid">
-      <article class="card"><h2>Version</h2><div class="metric">{VERSION}</div><p>WebGUI auf Port {DEFAULT_PORT}</p></article>
-      <article class="card"><h2>Dokumente</h2><div class="metric">{data["document_count"]}</div><p>Datenbestand: {html.escape(data["data_size_human"])}</p></article>
-      <article class="card"><h2>Freier Speicher</h2><div class="metric">{html.escape(data["disk_free_human"])}</div><progress max="100" value="{data["disk_percent"]}"></progress><p>{data["disk_percent"]}% belegt</p></article>
-    </div>
-    <section class="panel"><h2>Pfade</h2><table><tr><th>Bereich</th><th>Pfad</th></tr><tr><td>Daten</td><td><code>{html.escape(data["data_dir"])}</code></td></tr><tr><td>Scans</td><td><code>{html.escape(data["scan_dir"])}</code></td></tr><tr><td>Sicherungen</td><td><code>{html.escape(data["backup_dir"])}</code></td></tr></table></section>
-    <section class="panel"><h2>Letzte Sicherungen</h2><p class="muted">Sicherungen werden aus Sicherheitsgründen weiterhin über <code>sudo openscanstation-backup create</code> erstellt.</p><table><tr><th>Datei</th><th>Größe</th><th>Prüfsumme</th></tr>{backup_rows}</table></section>
-    <section class="panel"><h2>Diagnose</h2><p>Scanner- und Systemdiagnose auf der Konsole:</p><code>openscanstation doctor</code></section>
-    '''
+    content = f'''<div class="grid"><article class="card"><h2>Version</h2><div class="metric">{VERSION}</div><p>WebGUI auf Port {DEFAULT_PORT}</p></article><article class="card"><h2>Dokumente</h2><div class="metric">{data["document_count"]}</div><p>Datenbestand: {html.escape(data["data_size_human"])}</p></article><article class="card"><h2>Freier Speicher</h2><div class="metric">{html.escape(data["disk_free_human"])}</div><progress max="100" value="{data["disk_percent"]}"></progress><p>{data["disk_percent"]}% belegt</p></article></div><section class="panel"><h2>Pfade</h2><table><tr><th>Bereich</th><th>Pfad</th></tr><tr><td>Daten</td><td><code>{html.escape(data["data_dir"])}</code></td></tr><tr><td>Scans</td><td><code>{html.escape(data["scan_dir"])}</code></td></tr><tr><td>Sicherungen</td><td><code>{html.escape(data["backup_dir"])}</code></td></tr></table></section><section class="panel"><h2>Letzte Sicherungen</h2><p class="muted">Sicherungen werden über <code>sudo openscanstation-backup create</code> erstellt.</p><table><tr><th>Datei</th><th>Größe</th><th>Prüfsumme</th></tr>{backup_rows}</table></section><section class="panel"><h2>Diagnose</h2><code>openscanstation doctor</code></section>'''
     return _layout(content, "System")
 
 
@@ -207,64 +238,58 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
-        if path == "/":
-            self._html(_dashboard())
-        elif path == "/documents":
-            self._html(_documents_page(parse_qs(parsed.query).get("q", [""])[0]))
-        elif path == "/profiles":
-            self._html(_profiles_page())
-        elif path == "/system":
-            self._html(_system_page())
-        elif path == "/health":
-            self._json({"status": "ok", "service": "openscanstation", "version": VERSION, "port": DEFAULT_PORT})
-        elif path == "/version":
-            self._json({"version": VERSION})
-        elif path == "/api/scanners":
-            self._json(_scanner_payload())
-        elif path == "/api/documents":
-            self._json({"documents": list_documents(parse_qs(parsed.query).get("q", [""])[0])})
-        elif path == "/api/system":
-            self._json({"version": VERSION, **system_payload()})
+        if path == "/": self._html(_dashboard())
+        elif path == "/documents": self._html(_documents_page(parse_qs(parsed.query).get("q", [""])[0]))
+        elif path == "/profiles": self._html(_profiles_page())
+        elif path == "/scanner-actions": self._html(_scanner_actions_page())
+        elif path == "/system": self._html(_system_page())
+        elif path == "/health": self._json({"status": "ok", "service": "openscanstation", "version": VERSION, "port": DEFAULT_PORT})
+        elif path == "/version": self._json({"version": VERSION})
+        elif path == "/api/scanners": self._json(_scanner_payload())
+        elif path == "/api/scanner-actions": self._json(load_actions())
+        elif path == "/api/documents": self._json({"documents": list_documents(parse_qs(parsed.query).get("q", [""])[0])})
+        elif path == "/api/system": self._json({"version": VERSION, **system_payload()})
         elif path.startswith("/scans/"):
             name = unquote(path.removeprefix("/scans/"))
-            if not _SAFE_FILE.fullmatch(name):
-                return self._json({"error": "invalid_filename"}, HTTPStatus.BAD_REQUEST)
+            if not _SAFE_FILE.fullmatch(name): return self._json({"error": "invalid_filename"}, HTTPStatus.BAD_REQUEST)
             target = SCAN_DIR / name
-            if not target.is_file():
-                return self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
+            if not target.is_file(): return self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
             types = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
             self._send(target.read_bytes(), types.get(target.suffix.lower(), "application/octet-stream"), disposition=f'inline; filename="{target.name}"')
-        else:
-            self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
+        else: self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
 
     def do_POST(self):
         path = urlparse(self.path).path
         try:
             if path == "/refresh-scanners":
                 _SCANNER_CACHE.request_refresh()
-                self._html(_dashboard("Scanneraktualisierung wurde im Hintergrund gestartet."))
-                return
+                self._html(_dashboard("Scanneraktualisierung wurde im Hintergrund gestartet.")); return
             length = int(self.headers.get("Content-Length", "0"))
-            if length <= 0 or length > 65536:
-                raise ValueError("Ungültige Formulardaten")
+            if length <= 0 or length > 65536: raise ValueError("Ungültige Formulardaten")
             form = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=False)
             if path == "/scan":
                 result = _perform_scan(form)
-                msg = f"Scan erfolgreich: {result['filename']}"
-                if result["ocr_error"]:
-                    msg += f"; OCR-Hinweis: {result['ocr_error']}"
-                self._html(_dashboard(msg))
-                return
+                msg = f"Scan erfolgreich: {result['filename']}" + (f"; OCR-Hinweis: {result['ocr_error']}" if result["ocr_error"] else "")
+                self._html(_dashboard(msg)); return
+            if path == "/run-action":
+                result = _perform_action(form.get("scanner_id", [""])[0], form.get("action_id", [""])[0])
+                self._html(_dashboard(f"Scanneraktion erfolgreich: {result['filename']}")); return
+            if path == "/scanner-actions/save":
+                _save_action(form)
+                self._html(_scanner_actions_page("Scanneraktion wurde gespeichert.")); return
             if path == "/ocr":
                 filename = form.get("filename", [""])[0]
-                if not _SAFE_FILE.fullmatch(filename):
-                    raise ValueError("Ungültiger Dateiname")
+                if not _SAFE_FILE.fullmatch(filename): raise ValueError("Ungültiger Dateiname")
                 run_ocr(filename)
-                self._html(_documents_page(message=f"OCR abgeschlossen: {filename}"))
-                return
+                self._html(_documents_page(message=f"OCR abgeschlossen: {filename}")); return
             self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
         except Exception as exc:
-            page = _documents_page(message=str(exc), error=True) if path == "/ocr" else _dashboard(str(exc), True)
+            if path.startswith("/scanner-actions"):
+                page = _scanner_actions_page(str(exc), True)
+            elif path == "/ocr":
+                page = _documents_page(message=str(exc), error=True)
+            else:
+                page = _dashboard(str(exc), True)
             self._html(page, HTTPStatus.BAD_REQUEST)
 
     def log_message(self, fmt, *args):
