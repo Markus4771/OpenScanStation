@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.3
+
+- Samsung-AirScan-Erkennung robuster gemacht.
+- Zeitlimit für langsame WSD-/AirScan-Erkennung von 10 auf 45 Sekunden erhöht.
+- Samsung-Geräte werden aus der vollständigen `scanimage -L`-Zeile erkannt.
+- Zeitüberschreitungen und SANE-Fehler werden nicht mehr stillschweigend verworfen, sondern in der Scannerdiagnose angezeigt.
+- Prüfung ergänzt, dass der Samsung C48x mit einer Gerätezeile wie `airscan:w0:Samsung ...` erkannt wird.
+- Leere Bildausgaben eines Samsung-Scans werden als verständlicher Fehler gemeldet.
+
+## 0.5.2
+
+- Separate Weboberfläche für gerätebezogene Scanner-Einstellungen auf Port 8102 ergänzt.
+- Kodak-Standby-Zeit kann in der WebGUI aktiviert, deaktiviert und von 0 bis 240 Minuten eingestellt werden.
+- Systemd-Dienst `openscanstation-device-settings.service` ergänzt.
+- REST-Endpunkt `/api/device-settings` und Health-Endpunkt auf Port 8102 ergänzt.
+
 ## 0.5.1
 
 - Gerätebezogene Energieeinstellungen unter `/var/lib/openscanstation/device_settings.json` ergänzt.
