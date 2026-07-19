@@ -85,7 +85,7 @@ cat > "$BUILD_DIR/usr/bin/openscanstation-web" <<'EOF'
 #!/bin/sh
 set -e
 cd /opt/openscanstation
-exec /usr/bin/python3 -m openscanstation.web "$@"
+exec /usr/bin/python3 -m openscanstation.web_runtime "$@"
 EOF
 chmod 0755 "$BUILD_DIR/usr/bin/openscanstation-web"
 
