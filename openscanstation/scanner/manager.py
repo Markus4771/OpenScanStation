@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from openscanstation.scanner.base import ScannerInfo, ScannerPlugin
-from plugins.kodak_i2600.plugin import KodakI2600Plugin
+from plugins.kodak_i2600.runtime_plugin import KodakI2600Plugin
 from plugins.samsung_airscan.plugin import SamsungAirScanPlugin
 
 
