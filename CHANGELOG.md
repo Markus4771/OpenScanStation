@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+- Herstellerunabhängiges Modell für konfigurierbare Scanneraktionen ergänzt.
+- Neun Funktionsplätze mit Aktivierung, Displayname, Dokumenttitel, Scanprofil, Tags, Ablageziel und Nachbearbeitung ergänzt.
+- Sichere Speicherung unter `/var/lib/openscanstation/scanner_actions.json` ergänzt.
+- Neue WebGUI-Seite `Scanneraktionen` zum Bearbeiten aller neun Funktionsplätze ergänzt.
+- Aktive Scanneraktionen werden als Schnellaktionen direkt auf dem Dashboard angezeigt.
+- Scanneraktionen können bereits über die WebGUI gestartet werden.
+- REST-Endpunkt `/api/scanner-actions` ergänzt.
+- Geräte- und Ereignisbindungen für Kodak-, Samsung- und weitere Scanner vorbereitet.
+- Physische Tasten- und Displayanbindung bleibt modell- und treiberabhängig und wird über Geräteadapter ergänzt.
+
 ## 0.4.5
 
 - Langsame Scannererkennung aus den HTTP-Anfragen entfernt.
