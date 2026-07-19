@@ -20,6 +20,7 @@ test -f "$DEB_FILE"
 dpkg-deb -R "$DEB_FILE" "$WORK_DIR/package"
 
 install -D -m 0755 "$ROOT_DIR/scripts/backup.sh" "$WORK_DIR/package/usr/bin/openscanstation-backup"
+install -D -m 0755 "$ROOT_DIR/scripts/kodak_standby.py" "$WORK_DIR/package/usr/bin/openscanstation-kodak-standby"
 install -D -m 0755 "$ROOT_DIR/packaging/openscanstation-watchdog" "$WORK_DIR/package/usr/bin/openscanstation-watchdog"
 install -D -m 0644 "$ROOT_DIR/packaging/openscanstation-watchdog.service" "$WORK_DIR/package/lib/systemd/system/openscanstation-watchdog.service"
 install -D -m 0644 "$ROOT_DIR/packaging/openscanstation-watchdog.timer" "$WORK_DIR/package/lib/systemd/system/openscanstation-watchdog.timer"
@@ -36,4 +37,4 @@ dpkg-deb --root-owner-group --build "$WORK_DIR/package" "$NEW_DEB"
 mv "$NEW_DEB" "$DEB_FILE"
 
 echo "Release-Paket erstellt: $DEB_FILE"
-echo "Enthalten: Backup-Werkzeug und automatischer Health-Watchdog"
+echo "Enthalten: Backup, Kodak-Standby-Konfiguration und automatischer Health-Watchdog"
