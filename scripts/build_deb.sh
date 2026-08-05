@@ -37,11 +37,12 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: $ARCH
-Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils, tesseract-ocr, tesseract-ocr-deu, poppler-utils
+Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils, tesseract-ocr, tesseract-ocr-deu, poppler-utils, zbar-tools
 Maintainer: Markus Ach
 Description: Zentrale Scannerplattform mit WebGUI auf Port 8101
  OpenScanStation erkennt Kodak- und Samsung-Scanner über Plugins und bietet
- Scanprofile, Dokumentenkatalog, OCR, Volltextsuche, Vorschau und REST-API.
+ Scanprofile, Dokumentenkatalog, OCR, Volltextsuche, Barcode-/QR-Erkennung,
+ Vorschau und REST-API.
 EOF
 
 cat > "$BUILD_DIR/DEBIAN/postinst" <<'EOF'
