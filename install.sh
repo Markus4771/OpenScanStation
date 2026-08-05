@@ -5,22 +5,42 @@ REPO="Markus4771/OpenScanStation"
 REPO_URL="https://github.com/${REPO}.git"
 API_URL="https://api.github.com/repos/${REPO}/releases/latest"
 PACKAGE="openscanstation"
-SERVICE="openscanstation.service"
 WEB_PORT="8101"
 SOURCE_DIR="/opt/OpenScanStation"
 ACTION="${1:-install}"
+SERVICES=(
+  openscanstation.service
+  openscanstation-device-settings.service
+  openscanstation-storage-settings.service
+  openscanstation-workflows.service
+  openscanstation-classification.service
+  openscanstation-copy.service
+)
 
 log() { printf '[OpenScanStation] %s\n' "$*" >&2; }
 fail() { printf '[OpenScanStation] FEHLER: %s\n' "$*" >&2; exit 1; }
 
 require_root() {
-  [ "${EUID}" -eq 0 ] || fail "Bitte mit sudo ausführen: sudo bash install.sh ${ACTION}"
+  [ "${EUID}" -eq 0 ] || fail "Bitte mit sudo ausführen: sudo --preserve-env=GITHUB_TOKEN bash install.sh ${ACTION}"
 }
 
 install_base_dependencies() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y ca-certificates curl git python3 dpkg-dev
+  apt-get install -y \
+    ca-certificates curl git python3 python3-pil python3-usb dpkg-dev \
+    sane-utils sane-airscan usbutils \
+    tesseract-ocr tesseract-ocr-deu poppler-utils zbar-tools \
+    cups cups-client printer-driver-all
+  systemctl enable --now cups.service || true
+}
+
+curl_github() {
+  local -a args=(-fsSL -H "Accept: application/vnd.github+json")
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    args+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+  fi
+  curl "${args[@]}" "$@"
 }
 
 download_latest_release() {
@@ -28,12 +48,7 @@ download_latest_release() {
   local metadata asset_url asset_name
   metadata="$temp_dir/release.json"
 
-  local -a args=(-fsSL -H "Accept: application/vnd.github+json")
-  if [ -n "${GITHUB_TOKEN:-}" ]; then
-    args+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
-  fi
-
-  if ! curl "${args[@]}" "$API_URL" -o "$metadata"; then
+  if ! curl_github "$API_URL" -o "$metadata"; then
     return 1
   fi
 
@@ -52,41 +67,81 @@ PY
   [ -n "$asset_url" ] || return 1
   asset_name="${asset_url##*/}"
   log "Lade Release-Paket ${asset_name} herunter ..."
-  curl "${args[@]}" -L "$asset_url" -o "$temp_dir/$asset_name"
+  curl_github -L "$asset_url" -o "$temp_dir/$asset_name"
   printf '%s\n' "$temp_dir/$asset_name"
+}
+
+configure_private_clone() {
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    printf 'https://Markus4771:%s@github.com/%s.git\n' "$GITHUB_TOKEN" "$REPO"
+  else
+    printf '%s\n' "$REPO_URL"
+  fi
 }
 
 build_from_source() {
   local temp_dir="$1"
-  log "Kein passendes Release-Paket gefunden. Baue aus dem aktuellen GitHub-Stand."
+  local authenticated_url
+  authenticated_url="$(configure_private_clone)"
+  log "Kein passendes Release-Paket gefunden. Baue das vollständige Release aus dem aktuellen GitHub-Stand."
 
   if [ -d "$SOURCE_DIR/.git" ]; then
+    git -C "$SOURCE_DIR" remote set-url origin "$authenticated_url"
     git -C "$SOURCE_DIR" fetch --prune origin >&2
     git -C "$SOURCE_DIR" reset --hard origin/main >&2
+    git -C "$SOURCE_DIR" remote set-url origin "$REPO_URL"
   else
     rm -rf "$SOURCE_DIR"
-    git clone --depth 1 "$REPO_URL" "$SOURCE_DIR" >&2
+    if ! git clone --depth 1 "$authenticated_url" "$SOURCE_DIR" >&2; then
+      fail "Repository konnte nicht geladen werden. Bei privatem Repository GITHUB_TOKEN setzen."
+    fi
+    git -C "$SOURCE_DIR" remote set-url origin "$REPO_URL"
   fi
 
-  chmod +x "$SOURCE_DIR/scripts/build_deb.sh"
-  "$SOURCE_DIR/scripts/build_deb.sh" >&2
+  chmod +x "$SOURCE_DIR/scripts/build_deb.sh" "$SOURCE_DIR/scripts/build_release.sh"
+  "$SOURCE_DIR/scripts/build_release.sh" >&2
 
   local package_file
   package_file="$(find "$SOURCE_DIR/dist" -maxdepth 1 -type f -name 'openscanstation_*_all.deb' -print | sort -V | tail -n 1)"
-  [ -n "$package_file" ] || fail "Beim Build wurde kein Debian-Paket erzeugt."
+  [ -n "$package_file" ] || fail "Beim Release-Build wurde kein Debian-Paket erzeugt."
   cp "$package_file" "$temp_dir/"
   printf '%s\n' "$temp_dir/${package_file##*/}"
 }
 
+start_services() {
+  systemctl daemon-reload
+  for service in "${SERVICES[@]}"; do
+    if systemctl list-unit-files "$service" --no-legend 2>/dev/null | grep -q "^${service}"; then
+      systemctl enable --now "$service"
+      systemctl restart "$service"
+    else
+      log "Hinweis: ${service} ist im Paket nicht vorhanden."
+    fi
+  done
+  systemctl enable --now openscanstation-watchdog.timer 2>/dev/null || true
+}
+
 wait_for_health() {
   local attempt
-  for attempt in $(seq 1 15); do
+  for attempt in $(seq 1 20); do
     if curl -fsS --max-time 3 "http://127.0.0.1:${WEB_PORT}/health" >/dev/null; then
       return 0
     fi
     sleep 1
   done
   return 1
+}
+
+show_addresses() {
+  local address
+  address="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  address="${address:-SERVER-IP}"
+  log "Hauptoberfläche:       http://${address}:8101"
+  log "Geräteeinstellungen:  http://${address}:8102"
+  log "Speicherziele:        http://${address}:8103"
+  log "Workflows:            http://${address}:8104"
+  log "Dokumenterkennung:    http://${address}:8105"
+  log "Kopieren:             http://${address}:8106"
 }
 
 install_or_update() {
@@ -102,34 +157,37 @@ install_or_update() {
 
   log "Installiere ${package_file##*/} ..."
   apt-get install -y "$package_file"
-  systemctl daemon-reload
-  systemctl enable --now "$SERVICE"
-  systemctl restart "$SERVICE"
+  start_services
 
-  log "Prüfe Dienst und WebGUI ..."
+  log "Prüfe Dienst und Haupt-WebGUI ..."
   if wait_for_health; then
-    local address
-    address="$(hostname -I 2>/dev/null | awk '{print $1}')"
-    log "Installation erfolgreich. WebGUI: http://${address:-SERVER-IP}:${WEB_PORT}"
+    log "Installation erfolgreich."
+    show_addresses
   else
-    systemctl --no-pager --full status "$SERVICE" || true
+    systemctl --no-pager --full status openscanstation.service || true
     log "Paket wurde installiert, aber der Health-Check antwortet nicht."
-    log "Diagnose: journalctl -u ${SERVICE} -n 100 --no-pager"
+    log "Diagnose: journalctl -u openscanstation.service -n 100 --no-pager"
     exit 2
   fi
 }
 
 show_status() {
   dpkg-query -W -f='Paket: ${Package}\nVersion: ${Version}\nStatus: ${Status}\n' "$PACKAGE" 2>/dev/null || true
-  systemctl --no-pager --full status "$SERVICE" || true
-  printf '\nHealth-Check: '
-  curl -fsS --max-time 5 "http://127.0.0.1:${WEB_PORT}/health" || printf 'nicht erreichbar'
-  printf '\n'
+  for service in "${SERVICES[@]}"; do
+    printf '\n=== %s ===\n' "$service"
+    systemctl --no-pager --full status "$service" 2>/dev/null || true
+  done
+  printf '\nHealth-Checks:\n'
+  for port in 8101 8102 8103 8104 8105 8106; do
+    printf 'Port %s: ' "$port"
+    curl -fsS --max-time 3 "http://127.0.0.1:${port}/health" || printf 'nicht erreichbar'
+    printf '\n'
+  done
 }
 
 uninstall_package() {
   apt-get remove -y "$PACKAGE"
-  log "Scandaten unter /var/lib/openscanstation wurden nicht gelöscht."
+  log "Scandaten und Einstellungen unter /var/lib/openscanstation wurden nicht gelöscht."
 }
 
 require_root
