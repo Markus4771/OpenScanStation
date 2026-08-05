@@ -102,6 +102,11 @@ def list_test_scans(limit: int = 20) -> list[dict]:
     return history[: max(1, min(100, int(limit)))]
 
 
+def test_scan_history(limit: int = 20) -> list[dict]:
+    """Kompatibilitätsname für ältere und neue Hardware-WebGUI-Stände."""
+    return list_test_scans(limit)
+
+
 def test_scan_file(filename: str) -> Path | None:
     safe = Path(filename).name
     if safe != filename or not safe.startswith("testscan-"):
