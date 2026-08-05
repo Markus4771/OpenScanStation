@@ -98,6 +98,7 @@ start_services() {
   systemctl daemon-reload
   for service in "${SERVICES[@]}"; do
     if systemctl list-unit-files "$service" --no-legend 2>/dev/null | grep -q "^${service}"; then
+      systemctl reset-failed "$service" 2>/dev/null || true
       if ! systemctl enable --now "$service"; then
         log "WARNUNG: ${service} konnte nicht gestartet werden."
         systemctl --no-pager --full status "$service" || true
@@ -108,6 +109,7 @@ start_services() {
       log "Hinweis: ${service} ist im Paket nicht vorhanden."
     fi
   done
+  systemctl reset-failed openscanstation-watchdog.timer 2>/dev/null || true
   systemctl enable --now openscanstation-watchdog.timer 2>/dev/null || true
 }
 
