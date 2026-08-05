@@ -22,7 +22,11 @@ SERVICES=(
 log() { printf '[OpenScanStation] %s\n' "$*" >&2; }
 fail() { printf '[OpenScanStation] FEHLER: %s\n' "$*" >&2; exit 1; }
 require_root() { [ "${EUID}" -eq 0 ] || fail "Bitte mit sudo ausführen: sudo bash install.sh ${ACTION}"; }
-cleanup() { [ -n "${CLEANUP_DIR:-}" ] && rm -rf -- "$CLEANUP_DIR" || true; }
+cleanup() {
+  if [ -n "${CLEANUP_DIR:-}" ] && [ -d "$CLEANUP_DIR" ]; then
+    rm -rf -- "$CLEANUP_DIR"
+  fi
+}
 trap cleanup EXIT
 
 install_base_dependencies() {
@@ -126,7 +130,8 @@ show_addresses() {
 install_or_update() {
   install_base_dependencies
   local package_file
-  CLEANUP_DIR="$(mktemp -d)"
+  CLEANUP_DIR="$(mktemp -d /var/tmp/openscanstation-install.XXXXXX)"
+  chmod 0755 "$CLEANUP_DIR"
   package_file="$(download_latest_release "$CLEANUP_DIR" || true)"
   if [ -z "$package_file" ] || [ ! -f "$package_file" ]; then package_file="$(build_from_source "$CLEANUP_DIR")"; fi
   chmod 0644 "$package_file"
