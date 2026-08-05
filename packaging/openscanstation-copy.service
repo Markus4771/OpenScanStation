@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenScanStation Copy WebGUI
+After=network-online.target cups.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/openscanstation
+ExecStart=/usr/bin/openscanstation-copy --host 0.0.0.0 --port 8106
+Restart=on-failure
+RestartSec=3
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/openscanstation /tmp
+
+[Install]
+WantedBy=multi-user.target
