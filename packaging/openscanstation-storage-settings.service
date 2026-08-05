@@ -1,0 +1,20 @@
+[Unit]
+Description=OpenScanStation Speicherziel-Verwaltung
+After=network-online.target openscanstation.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openscanstation
+Group=openscanstation
+ExecStart=/usr/bin/openscanstation-storage-settings --host 0.0.0.0 --port 8103
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/openscanstation
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
