@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from openscanstation.scanner.manager import ScannerManager
 
-VERSION = "0.12.1"
+VERSION = "0.12.2"
 
 def _format_optional(value: bool | None) -> str:
     if value is None:
@@ -43,8 +43,8 @@ def command_scanners(_args: argparse.Namespace) -> int:
     return 0 if result.scanners else 1
 
 def command_hardware(_args: argparse.Namespace) -> int:
-    from openscanstation.hardware import inventory
-    print(json.dumps(inventory(), ensure_ascii=False, indent=2))
+    from openscanstation.hardware import inventory_fallback
+    print(json.dumps(inventory_fallback(), ensure_ascii=False, indent=2))
     return 0
 
 def command_doctor(_args: argparse.Namespace) -> int:
@@ -60,15 +60,15 @@ def command_doctor(_args: argparse.Namespace) -> int:
     sane_config = Path("/etc/sane.d")
     print(f"SANE-Konfiguration: {'vorhanden' if sane_config.is_dir() else 'fehlt'}")
     if shutil.which("scanimage"):
-        code, output = _run_text(["scanimage", "-L"])
+        code, output = _run_text(["scanimage", "-L"], 8)
         print("Scannererkennung:")
         print(output or "Keine Ausgabe")
         failed = failed or code != 0
     if shutil.which("lpstat"):
-        code, output = _run_text(["lpstat", "-p", "-d"])
+        code, output = _run_text(["lpstat", "-p", "-d"], 5)
         print("CUPS-Drucker:")
         print(output or "Keine Drucker eingerichtet")
-        failed = failed or code != 0
+        failed = failed or code not in {0, 1}
     return 1 if failed else 0
 
 def build_parser() -> argparse.ArgumentParser:
