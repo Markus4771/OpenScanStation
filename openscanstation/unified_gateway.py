@@ -35,7 +35,7 @@ def _sidebar() -> str:
 <a href="/documents">▤ <span>Dokumente</span></a>
 <a href="/profiles">⚙ <span>Scanprofile</span></a>
 <a href="/scanner-actions">▣ <span>Scanneraktionen</span></a>
-<details open><summary>▰ <span>Hardware</span></summary><div>
+<details open><summary>▰ <span>Hardware</span><span class="oss-arrow">⌄</span></summary><div>
 <a href="/hardware/">Übersicht</a>
 <a href="/hardware/scanners">Scanner</a>
 <a href="/hardware/printers">Drucker</a>
@@ -44,12 +44,12 @@ def _sidebar() -> str:
 <a href="/hardware/diagnostics">Diagnose</a>
 </div></details>
 <a href="/copy/">▣ <span>Kopieren</span></a>
-<a class="oss-section-link" href="/processing">▧ <span>Verarbeitung</span></a>
-<div class="oss-submenu">
+<details open><summary>▧ <span>Verarbeitung</span><span class="oss-arrow">⌄</span></summary><div>
+<a href="/processing">Übersicht</a>
 <a href="/storage/">Speicherziele</a>
 <a href="/workflows/">Workflows</a>
 <a href="/classification/">Dokumenterkennung</a>
-</div>
+</div></details>
 <a href="/system">⚙ <span>System</span></a>
 </nav>
 <div class="oss-status"><b>● OpenScanStation aktiv</b><span>Systemstatus</span></div>
@@ -62,14 +62,15 @@ html,body{min-height:100%}body{margin:0!important;background:#f6f8fb!important}
 body>header,body>nav,header nav,.oss-global-nav{display:none!important}
 .oss-sidebar{position:fixed;inset:0 auto 0 0;width:var(--oss-sidebar);box-sizing:border-box;background:linear-gradient(180deg,#0b2135,#0a1a2b);color:#fff;padding:24px 14px 18px;overflow-y:auto;z-index:9999;display:flex;flex-direction:column}
 .oss-brand{padding:0 10px 24px}.oss-brand strong{display:block;font-size:27px;line-height:1.15}.oss-brand span{display:block;margin-top:7px;color:#d6e0ea;font-size:14px}
-.oss-menu{display:grid;gap:5px}.oss-menu>a,.oss-menu summary{display:flex;gap:13px;align-items:center;padding:12px 14px;border-radius:9px;color:#fff!important;text-decoration:none!important;font-weight:700;cursor:pointer;list-style:none}
-.oss-menu>a:hover,.oss-menu summary:hover{background:#165cae}.oss-menu summary::-webkit-details-marker{display:none}
-.oss-menu details>div,.oss-submenu{display:grid;gap:2px;margin:3px 0 8px 31px;border-left:1px solid #496075;padding-left:10px}.oss-menu details>div a,.oss-submenu a{padding:9px 12px;color:#fff!important;text-decoration:none!important;border-radius:7px}.oss-menu details>div a:hover,.oss-submenu a:hover{background:#183c5c}
-.oss-section-link{margin-top:2px}.oss-status{margin-top:auto;padding:18px 10px 0;border-top:1px solid #2d4154;display:grid;gap:5px}.oss-status b{color:#fff}.oss-status span{font-size:13px;color:#c6d2dd;margin-left:22px}
+.oss-menu{display:grid;gap:5px}.oss-menu>a,.oss-menu summary{display:flex;gap:13px;align-items:center;padding:12px 14px;border-radius:9px;color:#fff!important;text-decoration:none!important;font-weight:700;cursor:pointer;list-style:none;user-select:none}
+.oss-menu>a:hover,.oss-menu summary:hover{background:#165cae}.oss-menu summary::-webkit-details-marker{display:none}.oss-menu summary::marker{display:none;content:""}
+.oss-menu summary .oss-arrow{margin-left:auto;transition:transform .18s ease}.oss-menu details:not([open]) summary .oss-arrow{transform:rotate(-90deg)}
+.oss-menu details>div{display:grid;gap:2px;margin:3px 0 8px 31px;border-left:1px solid #496075;padding-left:10px}.oss-menu details>div a{padding:9px 12px;color:#fff!important;text-decoration:none!important;border-radius:7px}.oss-menu details>div a:hover{background:#183c5c}
+.oss-status{margin-top:auto;padding:18px 10px 0;border-top:1px solid #2d4154;display:grid;gap:5px}.oss-status b{color:#fff}.oss-status span{font-size:13px;color:#c6d2dd;margin-left:22px}
 .oss-content-shell{margin-left:var(--oss-sidebar);min-height:100vh}.oss-content-shell main{max-width:1500px!important;margin:0 auto!important;padding:42px 38px 50px!important}.oss-content-shell header,.oss-content-shell nav{display:none!important}
 .oss-processing{font-family:system-ui,sans-serif;max-width:1200px;margin:0 auto;padding:42px 38px}.oss-processing h1{font-size:2rem;margin:0 0 .4rem}.oss-processing .lead{color:#65727e;margin-bottom:1.8rem}.oss-processing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}.oss-processing-card{background:#fff;border-radius:14px;padding:1.4rem;box-shadow:0 2px 14px #0001;border:1px solid #e7ebef}.oss-processing-card h2{margin:.2rem 0 .5rem}.oss-processing-card p{color:#65727e;min-height:3rem}.oss-processing-card a{display:inline-block;padding:.7rem 1rem;background:#0d2135;color:#fff;text-decoration:none;border-radius:8px;font-weight:700}.oss-status-pill{display:inline-block;padding:.25rem .6rem;border-radius:999px;font-size:.85rem;font-weight:700;margin-bottom:.7rem}.oss-ok{background:#d5f5e3;color:#196f3d}.oss-bad{background:#fadbd8;color:#922b21}
 @media(max-width:900px){:root{--oss-sidebar:225px}.oss-sidebar{padding-left:8px;padding-right:8px}.oss-brand strong{font-size:21px}.oss-content-shell main,.oss-processing{padding:24px 16px!important}}
-@media(max-width:650px){.oss-sidebar{position:relative;width:100%;height:auto}.oss-content-shell{margin-left:0}.oss-menu details>div,.oss-submenu{margin-left:18px}}
+@media(max-width:650px){.oss-sidebar{position:relative;width:100%;height:auto}.oss-content-shell{margin-left:0}.oss-menu details>div{margin-left:18px}}
 </style>'''
 
 
