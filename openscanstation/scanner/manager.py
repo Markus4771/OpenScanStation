@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from openscanstation.scanner.base import ScannerInfo, ScannerPlugin
+from plugins.brother_ads.plugin import BrotherADSPlugin
 from plugins.kodak_i2600.runtime_plugin import KodakI2600Plugin
 from plugins.samsung_airscan.plugin import SamsungAirScanPlugin
 
@@ -27,7 +28,7 @@ class ScannerManager:
     """Lädt Scanner-Plugins und führt deren Erkennung gemeinsam aus."""
 
     def __init__(self, plugins: list[ScannerPlugin] | None = None) -> None:
-        self.plugins = plugins or [KodakI2600Plugin(), SamsungAirScanPlugin()]
+        self.plugins = plugins or [KodakI2600Plugin(), SamsungAirScanPlugin(), BrotherADSPlugin()]
 
     def discover(self) -> DiscoveryResult:
         scanners: list[ScannerInfo] = []
@@ -37,7 +38,7 @@ class ScannerManager:
         for plugin in self.plugins:
             try:
                 discovered = plugin.discover()
-            except Exception as exc:  # Ein defektes Plugin darf andere nicht blockieren.
+            except Exception as exc:
                 errors.append(PluginError(plugin.plugin_id, str(exc)))
                 continue
 
