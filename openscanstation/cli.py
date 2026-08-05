@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 import argparse
+import json
 import platform
 import shutil
 import subprocess
 from pathlib import Path
 from openscanstation.scanner.manager import ScannerManager
 
-VERSION = "0.7.1"
+VERSION = "0.8.0"
 
 def _format_optional(value: bool | None) -> str:
     if value is None:
@@ -41,11 +42,16 @@ def command_scanners(_args: argparse.Namespace) -> int:
         print(f"Fehler [{error.plugin_id}]: {error.message}")
     return 0 if result.scanners else 1
 
+def command_hardware(_args: argparse.Namespace) -> int:
+    from openscanstation.hardware import inventory
+    print(json.dumps(inventory(), ensure_ascii=False, indent=2))
+    return 0
+
 def command_doctor(_args: argparse.Namespace) -> int:
     print(f"OpenScanStation {VERSION}")
     print(f"System: {platform.platform()}")
     print(f"Architektur: {platform.machine()}")
-    checks = ["scanimage", "tesseract", "pdftoppm", "zbarimg", "lp", "lpstat"]
+    checks = ["scanimage", "airscan-discover", "tesseract", "pdftoppm", "zbarimg", "lp", "lpstat", "lpoptions"]
     failed = False
     for command in checks:
         path = shutil.which(command)
@@ -72,6 +78,8 @@ def build_parser() -> argparse.ArgumentParser:
     version.set_defaults(func=command_version)
     scanners = sub.add_parser("scanners", help="Scanner erkennen")
     scanners.set_defaults(func=command_scanners)
+    hardware = sub.add_parser("hardware", help="Scanner und Drucker als JSON anzeigen")
+    hardware.set_defaults(func=command_hardware)
     doctor = sub.add_parser("doctor", help="Systemdiagnose ausführen")
     doctor.set_defaults(func=command_doctor)
     return parser
