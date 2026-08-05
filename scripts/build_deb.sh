@@ -39,10 +39,10 @@ Priority: optional
 Architecture: $ARCH
 Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils, tesseract-ocr, tesseract-ocr-deu, poppler-utils, zbar-tools
 Maintainer: Markus Ach
-Description: Zentrale Scannerplattform mit WebGUI auf Port 8101
- OpenScanStation erkennt Kodak- und Samsung-Scanner über Plugins und bietet
- Scanprofile, Dokumentenkatalog, OCR, Volltextsuche, Barcode-/QR-Erkennung,
- Vorschau und REST-API.
+Description: Zentrale Scannerplattform mit einheitlicher WebGUI
+ OpenScanStation erkennt Scanner über Plugins und bietet Scanprofile,
+ Dokumentenkatalog, OCR, Volltextsuche, Barcode-/QR-Erkennung,
+ Kopieren, Hardwareverwaltung und REST-API.
 EOF
 
 cat > "$BUILD_DIR/DEBIAN/postinst" <<'EOF'
@@ -92,14 +92,14 @@ chmod 0755 "$BUILD_DIR/usr/bin/openscanstation-web"
 
 cat > "$BUILD_DIR/lib/systemd/system/openscanstation.service" <<'EOF'
 [Unit]
-Description=OpenScanStation WebGUI and Scanner Service
+Description=OpenScanStation Internal Web and Scanner Service
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/openscanstation
-ExecStart=/usr/bin/openscanstation-web --host 0.0.0.0 --port 8101
+ExecStart=/usr/bin/openscanstation-web --host 127.0.0.1 --port 8111
 Restart=on-failure
 RestartSec=3
 User=root
@@ -120,4 +120,4 @@ mkdir -p "$OUTPUT_DIR"
 dpkg-deb --root-owner-group --build "$BUILD_DIR" "$OUTPUT_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
 
 echo "Paket erstellt: $OUTPUT_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
-echo "WebGUI nach Installation: http://<VM-IP>:8101"
+echo "Einheitliche WebGUI nach Installation: http://<VM-IP>:8101"
