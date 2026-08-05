@@ -5,9 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+WorkingDirectory=/opt/openscanstation
 User=openscanstation
 Group=openscanstation
-ExecStart=/usr/bin/openscanstation-workflows --host 0.0.0.0 --port 8104
+ExecStart=/usr/bin/openscanstation-workflows --host 127.0.0.1 --port 8104
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
