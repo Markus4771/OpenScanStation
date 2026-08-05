@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from openscanstation.scanner.manager import ScannerManager
 
-VERSION = "0.9.5"
+VERSION = "0.9.6"
 
 def _format_optional(value: bool | None) -> str:
     if value is None:
