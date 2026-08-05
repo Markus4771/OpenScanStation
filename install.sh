@@ -8,6 +8,7 @@ PACKAGE="openscanstation"
 WEB_PORT="8101"
 SOURCE_DIR="/opt/OpenScanStation"
 ACTION="${1:-install}"
+CLEANUP_DIR=""
 SERVICES=(
   openscanstation.service
   openscanstation-device-settings.service
@@ -21,6 +22,8 @@ SERVICES=(
 log() { printf '[OpenScanStation] %s\n' "$*" >&2; }
 fail() { printf '[OpenScanStation] FEHLER: %s\n' "$*" >&2; exit 1; }
 require_root() { [ "${EUID}" -eq 0 ] || fail "Bitte mit sudo ausführen: sudo bash install.sh ${ACTION}"; }
+cleanup() { [ -n "${CLEANUP_DIR:-}" ] && rm -rf -- "$CLEANUP_DIR" || true; }
+trap cleanup EXIT
 
 install_base_dependencies() {
   export DEBIAN_FRONTEND=noninteractive
@@ -90,7 +93,12 @@ start_services() {
   systemctl daemon-reload
   for service in "${SERVICES[@]}"; do
     if systemctl list-unit-files "$service" --no-legend 2>/dev/null | grep -q "^${service}"; then
-      systemctl enable --now "$service"; systemctl restart "$service"
+      if ! systemctl enable --now "$service"; then
+        log "WARNUNG: ${service} konnte nicht gestartet werden."
+        systemctl --no-pager --full status "$service" || true
+        continue
+      fi
+      systemctl restart "$service" || true
     else
       log "Hinweis: ${service} ist im Paket nicht vorhanden."
     fi
@@ -117,10 +125,11 @@ show_addresses() {
 
 install_or_update() {
   install_base_dependencies
-  local temp_dir package_file
-  temp_dir="$(mktemp -d)"; trap 'rm -rf "$temp_dir"' EXIT
-  package_file="$(download_latest_release "$temp_dir" || true)"
-  if [ -z "$package_file" ] || [ ! -f "$package_file" ]; then package_file="$(build_from_source "$temp_dir")"; fi
+  local package_file
+  CLEANUP_DIR="$(mktemp -d)"
+  package_file="$(download_latest_release "$CLEANUP_DIR" || true)"
+  if [ -z "$package_file" ] || [ ! -f "$package_file" ]; then package_file="$(build_from_source "$CLEANUP_DIR")"; fi
+  chmod 0644 "$package_file"
   log "Installiere ${package_file##*/} ..."
   apt-get install -y "$package_file"
   start_services
