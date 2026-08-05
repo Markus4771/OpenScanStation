@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+from openscanstation.workflow_web import main
+raise SystemExit(main())
