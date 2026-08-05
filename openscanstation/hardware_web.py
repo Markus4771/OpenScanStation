@@ -6,6 +6,7 @@ import html
 import json
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from openscanstation.cli import VERSION
@@ -13,6 +14,9 @@ from openscanstation.hardware import (
     brother_assistant, cancel_print_job, diagnostics, driver_status,
     hardware_events, inventory, load_settings, network_discovery,
     print_test_page, tcp_probe, update_printer, usb_devices,
+)
+from openscanstation.hardware_actions import (
+    add_ipp_printer, create_support_bundle, latest_support_bundle, test_scan,
 )
 from openscanstation.scanner_settings import (
     load_settings as load_scanner_settings, test_connection, update_scanner,
@@ -31,7 +35,7 @@ def esc(value: object, attr: bool = False) -> str:
 
 def layout(content: str, title: str = "Hardware", notice: str = "", error: bool = False) -> str:
     note = f'<div class="notice {"error" if error else "success"}">{esc(notice)}</div>' if notice else ""
-    nav = '<a href="/">Übersicht</a><a href="/setup">Assistent</a><a href="/scanners">Scanner</a><a href="/printers">Drucker</a><a href="/network">Netzwerk</a><a href="/usb">USB</a><a href="/maintenance">Wartung</a><a href="/drivers">Treiber</a><a href="/diagnostics">Diagnose</a>'
+    nav = '<a href="/">Übersicht</a><a href="/setup">Assistent</a><a href="/scanners">Scanner</a><a href="/printers">Drucker</a><a href="/network">Netzwerk</a><a href="/usb">USB</a><a href="/maintenance">Wartung</a><a href="/drivers">Treiber</a><a href="/diagnostics">Diagnose</a><a href="/support">Support</a>'
     return f'<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title><style>{STYLE}</style></head><body><header><h1>OpenScanStation Hardware</h1><div>Version {VERSION}</div><nav>{nav}</nav></header><main>{note}{content}</main></body></html>'
 
 
@@ -56,19 +60,20 @@ def overview(notice: str = "", error: bool = False) -> str:
     return layout(content, notice=notice, error=error)
 
 
-def setup_page() -> str:
+def setup_page(notice: str = "", error: bool = False) -> str:
     brother = brother_assistant(); network = network_discovery(); usb = usb_devices(); inv = inventory()
     brother_state = badge("Brother-Scanner erkannt", "ok") if brother["scanner_found"] else badge("Noch kein Brother-Scanner erkannt", "warn")
     network_rows = "".join(f'<tr><td>{esc(d.get("name",""))}</td><td>{esc(d.get("protocol",""))}</td><td><code>{esc(d.get("uri",""))}</code></td></tr>' for d in network[:15]) or '<tr><td colspan="3">Keine Netzwerkgeräte gefunden.</td></tr>'
-    content = f'<section class="panel"><h2>Hardware-Assistent</h2><p>Der Assistent prüft Scanner, Drucker, Treiber, Netzwerk und USB.</p></section><div class="grid"><article class="card step"><h2>1. Erkennung</h2><p>{len(inv["devices"])} eingerichtete Geräte, {len(network)} Netzwerkfunde, {len(usb)} USB-Geräte.</p><form method="post" action="/refresh"><button>Erkennung wiederholen</button></form></article><article class="card step"><h2>2. Brother ADS-2600We</h2>{brother_state}<p>SANE: {"bereit" if brother["sane"] else "fehlt"} · AirScan: {"bereit" if brother["airscan"] else "fehlt"} · Brother-Treiber: {"vorhanden" if brother["driver"] else "nicht erkannt"}</p><a class="button" href="/brother">Brother-Assistent</a></article><article class="card step"><h2>3. Drucker</h2><p>CUPS-Drucker verwalten und testen.</p><a class="button" href="/printers">Drucker öffnen</a></article></div><section class="panel"><h2>Gefundene Netzwerkgeräte</h2><table><tr><th>Name</th><th>Protokoll</th><th>Adresse</th></tr>{network_rows}</table></section>'
-    return layout(content, "Hardware-Assistent")
+    content = f'<section class="panel"><h2>Hardware-Assistent</h2><p>Der Assistent prüft Scanner, Drucker, Treiber, Netzwerk und USB.</p></section><div class="grid"><article class="card step"><h2>1. Erkennung</h2><p>{len(inv["devices"])} eingerichtete Geräte, {len(network)} Netzwerkfunde, {len(usb)} USB-Geräte.</p><form method="post" action="/refresh"><button>Erkennung wiederholen</button></form></article><article class="card step"><h2>2. Brother ADS-2600We</h2>{brother_state}<p>SANE: {"bereit" if brother["sane"] else "fehlt"} · AirScan: {"bereit" if brother["airscan"] else "fehlt"} · Brother-Treiber: {"vorhanden" if brother["driver"] else "nicht erkannt"}</p><a class="button" href="/brother">Brother-Assistent</a></article><article class="card step"><h2>3. IPP-Drucker hinzufügen</h2><form method="post" action="/printer/add"><label>Name<input name="name" required placeholder="Bürodrucker"></label><label>Geräte-URI<input name="uri" required placeholder="ipp://192.168.0.50/ipp/print"></label><button>Drucker einrichten</button></form></article></div><section class="panel"><h2>Gefundene Netzwerkgeräte</h2><table><tr><th>Name</th><th>Protokoll</th><th>Adresse</th></tr>{network_rows}</table></section>'
+    return layout(content, "Hardware-Assistent", notice, error)
 
 
 def scanners(notice: str = "", error: bool = False, result: dict | None = None) -> str:
     devices = [d for d in inventory()["devices"] if d["kind"] == "scanner"]; settings = load_scanner_settings(); blocks = []
     for d in devices:
         sid = d["id"]; alias = settings.get("aliases", {}).get(sid, ""); caps = d.get("capabilities", {})
-        blocks.append(f'<article class="card"><h2>{esc(d["name"])}</h2><p>{esc(d.get("manufacturer",""))} {esc(d.get("model",""))}</p><p><code>{esc(d.get("connection",""))}</code></p><p>ADF: {"Ja" if caps.get("adf") else "Nein"} · Duplex: {"Ja" if caps.get("duplex") else "Nein"}</p><form method="post" action="/scanner/save"><input type="hidden" name="scanner_id" value="{esc(sid,True)}"><label>Anzeigename<input name="alias" value="{esc(alias,True)}"></label><label>Aktiv<select name="enabled"><option value="1" {"selected" if d.get("enabled") else ""}>Ja</option><option value="0" {"selected" if not d.get("enabled") else ""}>Nein</option></select></label><label>Standard<select name="make_default"><option value="0">Nein</option><option value="1" {"selected" if d.get("default") else ""}>Ja</option></select></label><button>Speichern</button></form><div class="actions"><form class="inline" method="post" action="/scanner/test"><input type="hidden" name="scanner_id" value="{esc(sid,True)}"><button class="secondary">Verbindung testen</button></form><a class="button secondary" href="/scanner/{quote(sid,safe="")}">Details</a></div></article>')
+        active_yes = "selected" if d.get("enabled") else ""; active_no = "selected" if not d.get("enabled") else ""; default_yes = "selected" if d.get("default") else ""
+        blocks.append(f'<article class="card"><h2>{esc(d["name"])}</h2><p>{esc(d.get("manufacturer",""))} {esc(d.get("model",""))}</p><p><code>{esc(d.get("connection",""))}</code></p><p>ADF: {"Ja" if caps.get("adf") else "Nein"} · Duplex: {"Ja" if caps.get("duplex") else "Nein"}</p><form method="post" action="/scanner/save"><input type="hidden" name="scanner_id" value="{esc(sid,True)}"><label>Anzeigename<input name="alias" value="{esc(alias,True)}"></label><label>Aktiv<select name="enabled"><option value="1" {active_yes}>Ja</option><option value="0" {active_no}>Nein</option></select></label><label>Standard<select name="make_default"><option value="0">Nein</option><option value="1" {default_yes}>Ja</option></select></label><button>Speichern</button></form><div class="actions"><form class="inline" method="post" action="/scanner/test"><input type="hidden" name="scanner_id" value="{esc(sid,True)}"><button class="secondary">Verbindung testen</button></form><form class="inline" method="post" action="/scanner/test-scan"><input type="hidden" name="scanner_id" value="{esc(sid,True)}"><input type="hidden" name="resolution" value="100"><input type="hidden" name="mode" value="Gray"><button>Testscan</button></form><a class="button secondary" href="/scanner/{quote(sid,safe="")}">Details</a></div></article>')
     result_box = f'<section class="panel"><h2>Testergebnis</h2><pre>{esc(json.dumps(result,ensure_ascii=False,indent=2))}</pre></section>' if result else ""
     empty = '<article class="card"><h2>Kein Scanner gefunden</h2><a class="button" href="/setup">Assistent öffnen</a></article>'
     return layout(f'<section class="panel hero"><div><h2>Scanner</h2><p class="muted">Erkennen, benennen, testen und als Standard festlegen.</p></div><a class="button" href="/brother">Brother-Assistent</a></section>{result_box}<div class="grid">{"".join(blocks) or empty}</div>', "Scanner", notice, error)
@@ -80,9 +85,10 @@ def printers(notice: str = "", error: bool = False) -> str:
         pid = d["id"]; alias = settings.get("printer_aliases", {}).get(pid, "")
         jobs = "".join(f'<li>{esc(j.get("raw",""))} <form class="inline" method="post" action="/printer/cancel"><input type="hidden" name="job" value="{esc(j.get("id",""),True)}"><button class="secondary">Abbrechen</button></form></li>' for j in d.get("jobs", [])) or '<li>Keine offenen Aufträge</li>'
         state = badge("Online", "ok") if d.get("online") else badge("Offline", "bad")
-        blocks.append(f'<article class="card"><h2>{esc(d["name"])}</h2>{state}<p><code>{esc(d.get("connection",""))}</code></p><form method="post" action="/printer/save"><input type="hidden" name="printer" value="{esc(pid,True)}"><label>Anzeigename<input name="alias" value="{esc(alias,True)}"></label><label>Aktiv<select name="enabled"><option value="1" {"selected" if d.get("enabled") else ""}>Ja</option><option value="0" {"selected" if not d.get("enabled") else ""}>Nein</option></select></label><label>Standard<select name="make_default"><option value="0">Nein</option><option value="1" {"selected" if d.get("default") else ""}>Ja</option></select></label><button>Speichern</button></form><div class="actions"><form class="inline" method="post" action="/printer/test"><input type="hidden" name="printer" value="{esc(pid,True)}"><button class="secondary">Testseite</button></form><a class="button secondary" href="/printer/{quote(pid,safe="")}">Details</a></div><details><summary>Druckaufträge</summary><ul>{jobs}</ul></details></article>')
-    empty = '<article class="card"><h2>Kein Drucker eingerichtet</h2><p>Prüfe CUPS und die Netzwerkerkennung.</p></article>'
-    return layout(f'<section class="panel hero"><div><h2>Drucker</h2><p class="muted">CUPS-Drucker verwalten, testen und Warteschlangen bearbeiten.</p></div><a class="button" href="/network">Netzwerkdrucker suchen</a></section><div class="grid">{"".join(blocks) or empty}</div>', "Drucker", notice, error)
+        active_yes = "selected" if d.get("enabled") else ""; active_no = "selected" if not d.get("enabled") else ""; default_yes = "selected" if d.get("default") else ""
+        blocks.append(f'<article class="card"><h2>{esc(d["name"])}</h2>{state}<p><code>{esc(d.get("connection",""))}</code></p><form method="post" action="/printer/save"><input type="hidden" name="printer" value="{esc(pid,True)}"><label>Anzeigename<input name="alias" value="{esc(alias,True)}"></label><label>Aktiv<select name="enabled"><option value="1" {active_yes}>Ja</option><option value="0" {active_no}>Nein</option></select></label><label>Standard<select name="make_default"><option value="0">Nein</option><option value="1" {default_yes}>Ja</option></select></label><button>Speichern</button></form><div class="actions"><form class="inline" method="post" action="/printer/test"><input type="hidden" name="printer" value="{esc(pid,True)}"><button class="secondary">Testseite</button></form><a class="button secondary" href="/printer/{quote(pid,safe="")}">Details</a></div><details><summary>Druckaufträge</summary><ul>{jobs}</ul></details></article>')
+    empty = '<article class="card"><h2>Kein Drucker eingerichtet</h2><p>Nutze den Hardware-Assistenten für einen IPP-Drucker.</p><a class="button" href="/setup">Assistent öffnen</a></article>'
+    return layout(f'<section class="panel hero"><div><h2>Drucker</h2><p class="muted">CUPS-Drucker verwalten, testen und Warteschlangen bearbeiten.</p></div><a class="button" href="/setup">Drucker hinzufügen</a></section><div class="grid">{"".join(blocks) or empty}</div>', "Drucker", notice, error)
 
 
 def detail(kind: str, device_id: str) -> str:
@@ -108,7 +114,7 @@ def brother_page() -> str:
     air = "".join(f'<li>{esc(d.get("name",""))}: <code>{esc(d.get("uri",""))}</code></li>' for d in data["airscan_devices"]) or '<li>Kein Brother-AirScan-Gerät gefunden.</li>'
     recommendations = "".join(f'<li>{esc(x)}</li>' for x in data["recommendations"])
     states = badge("SANE", "ok" if data["sane"] else "bad") + badge("AirScan", "ok" if data["airscan"] else "bad") + badge("Brother-Treiber", "ok" if data["driver"] else "warn")
-    return layout(f'<section class="panel"><h2>Brother ADS-2600We Assistent</h2><div class="actions">{states}</div><ol>{recommendations}</ol></section><div class="grid">{scanner_cards}</div><section class="panel"><h2>AirScan-Funde</h2><ul>{air}</ul><p>Beim ADS-2600We ist die treiberlose Netzwerkverbindung über AirScan/eSCL normalerweise die bevorzugte Variante. Der Assistent verändert keine Firmware.</p></section>', "Brother-Assistent")
+    return layout(f'<section class="panel"><h2>Brother ADS-2600We Assistent</h2><div class="actions">{states}</div><ol>{recommendations}</ol></section><div class="grid">{scanner_cards}</div><section class="panel"><h2>AirScan-Funde</h2><ul>{air}</ul><p>Beim ADS-2600We ist die treiberlose Netzwerkverbindung über AirScan/eSCL normalerweise die bevorzugte Variante.</p></section>', "Brother-Assistent")
 
 
 def maintenance() -> str:
@@ -126,15 +132,28 @@ def diagnostics_page() -> str:
     return layout(blocks, "Diagnose")
 
 
+def support_page(notice: str = "", error: bool = False) -> str:
+    latest = latest_support_bundle()
+    download = f'<a class="button secondary" href="/support/download">Letztes Supportpaket herunterladen</a><p class="muted">{esc(latest.name)} · {latest.stat().st_size} Byte</p>' if latest else '<p>Noch kein Supportpaket vorhanden.</p>'
+    content = f'<section class="panel"><h2>Support und Diagnoseexport</h2><p>Das Paket enthält Hardwareinventar, Diagnoseausgaben, CUPS-/SANE-Status und relevante Dienstprotokolle. Es enthält keine Dokumente oder Scanbilder.</p><form method="post" action="/support/create"><button>Supportpaket erstellen</button></form>{download}</section>'
+    return layout(content, "Support", notice, error)
+
+
 class Handler(BaseHTTPRequestHandler):
-    def send(self, data: str | bytes, status: int = 200, ctype: str = "text/html; charset=utf-8") -> None:
+    def send(self, data: str | bytes, status: int = 200, ctype: str = "text/html; charset=utf-8", disposition: str = "") -> None:
         body = data.encode() if isinstance(data, str) else data
-        self.send_response(status); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(body))); self.send_header("X-Content-Type-Options", "nosniff"); self.end_headers(); self.wfile.write(body)
+        self.send_response(status); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(body))); self.send_header("X-Content-Type-Options", "nosniff")
+        if disposition: self.send_header("Content-Disposition", disposition)
+        self.end_headers(); self.wfile.write(body)
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
-        routes = {"/": overview, "/setup": setup_page, "/scanners": scanners, "/printers": printers, "/network": network_page, "/usb": usb_page, "/brother": brother_page, "/maintenance": maintenance, "/drivers": drivers_page, "/diagnostics": diagnostics_page}
+        routes = {"/": overview, "/setup": setup_page, "/scanners": scanners, "/printers": printers, "/network": network_page, "/usb": usb_page, "/brother": brother_page, "/maintenance": maintenance, "/drivers": drivers_page, "/diagnostics": diagnostics_page, "/support": support_page}
         if path in routes: self.send(routes[path]())
+        elif path == "/support/download":
+            bundle = latest_support_bundle()
+            if not bundle: self.send(support_page("Noch kein Supportpaket vorhanden.", True), 404); return
+            self.send(bundle.read_bytes(), ctype="application/gzip", disposition=f'attachment; filename="{bundle.name}"')
         elif path.startswith("/scanner/"): self.send(detail("scanner", unquote(path.split("/", 2)[2])))
         elif path.startswith("/printer/"): self.send(detail("printer", unquote(path.split("/", 2)[2])))
         elif path == "/health": self.send(json.dumps({"status":"ok","service":"openscanstation-hardware","version":VERSION}), ctype="application/json")
@@ -153,11 +172,17 @@ class Handler(BaseHTTPRequestHandler):
                 update_scanner(form.get("scanner_id", [""])[0], alias=form.get("alias", [""])[0], enabled=form.get("enabled", ["0"])[0] == "1", make_default=form.get("make_default", ["0"])[0] == "1"); self.send(scanners("Scanner gespeichert.")); return
             if path == "/scanner/test":
                 data = inventory(); result = test_connection(form.get("scanner_id", [""])[0], [d for d in data["devices"] if d["kind"] == "scanner"]); self.send(scanners("Verbindungstest abgeschlossen.", not result.get("ok", False), result)); return
+            if path == "/scanner/test-scan":
+                result = test_scan(form.get("scanner_id", [""])[0], resolution=int(form.get("resolution", ["100"])[0]), mode=form.get("mode", ["Gray"])[0]); self.send(scanners(result["message"], False, result)); return
+            if path == "/printer/add":
+                result = add_ipp_printer(form.get("name", [""])[0], form.get("uri", [""])[0]); self.send(setup_page(result["message"])); return
             if path == "/printer/save":
                 update_printer(form.get("printer", [""])[0], alias=form.get("alias", [""])[0], enabled=form.get("enabled", ["0"])[0] == "1", make_default=form.get("make_default", ["0"])[0] == "1"); self.send(printers("Drucker gespeichert.")); return
             if path == "/printer/test": self.send(printers(print_test_page(form.get("printer", [""])[0])["message"])); return
             if path == "/printer/cancel": self.send(printers(cancel_print_job(form.get("job", [""])[0])["message"])); return
             if path == "/network/probe": self.send(network_page(tcp_probe(form.get("host", [""])[0]))); return
+            if path == "/support/create":
+                result = create_support_bundle(); self.send(support_page(result["message"])); return
             self.send(json.dumps({"error":"not_found"}), 404, "application/json")
         except Exception as exc:
             self.send(layout('<section class="panel"><h2>Aktion fehlgeschlagen</h2></section>', "Hardware", str(exc), True), HTTPStatus.BAD_REQUEST)
@@ -168,7 +193,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(); parser.add_argument("--host", default=HOST); parser.add_argument("--port", type=int, default=PORT); args = parser.parse_args(argv)
-    server = ThreadingHTTPServer((args.host, args.port), Handler); print(f"Hardware-Zentrale auf {args.host}:{args.port}")
+    server = ThreadingHTTPServer((args.host,args.port),Handler); print(f"Hardware-Zentrale auf {args.host}:{args.port}")
     try: server.serve_forever()
     except KeyboardInterrupt: pass
     finally: server.server_close()
