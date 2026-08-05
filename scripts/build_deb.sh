@@ -48,7 +48,19 @@ EOF
 cat > "$BUILD_DIR/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
+if ! getent group openscanstation >/dev/null 2>&1; then
+    addgroup --system openscanstation
+fi
+if ! getent passwd openscanstation >/dev/null 2>&1; then
+    adduser --system --ingroup openscanstation --home /var/lib/openscanstation --no-create-home --shell /usr/sbin/nologin openscanstation
+fi
+for group in scanner lp; do
+    if getent group "$group" >/dev/null 2>&1; then
+        adduser openscanstation "$group" >/dev/null 2>&1 || true
+    fi
+done
 mkdir -p /var/lib/openscanstation/scans
+chown -R openscanstation:openscanstation /var/lib/openscanstation
 chmod 0750 /var/lib/openscanstation /var/lib/openscanstation/scans
 if command -v udevadm >/dev/null 2>&1; then
     udevadm control --reload-rules || true
