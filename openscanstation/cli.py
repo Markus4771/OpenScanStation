@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from openscanstation.scanner.manager import ScannerManager
 
-VERSION = "0.6.3"
+VERSION = "0.7.0"
 
 def _format_optional(value: bool | None) -> str:
     if value is None:
@@ -45,7 +45,7 @@ def command_doctor(_args: argparse.Namespace) -> int:
     print(f"OpenScanStation {VERSION}")
     print(f"System: {platform.platform()}")
     print(f"Architektur: {platform.machine()}")
-    checks = ["scanimage", "tesseract", "pdftoppm", "zbarimg"]
+    checks = ["scanimage", "tesseract", "pdftoppm", "zbarimg", "lp", "lpstat"]
     failed = False
     for command in checks:
         path = shutil.which(command)
@@ -57,6 +57,11 @@ def command_doctor(_args: argparse.Namespace) -> int:
         code, output = _run_text(["scanimage", "-L"])
         print("Scannererkennung:")
         print(output or "Keine Ausgabe")
+        failed = failed or code != 0
+    if shutil.which("lpstat"):
+        code, output = _run_text(["lpstat", "-p", "-d"])
+        print("CUPS-Drucker:")
+        print(output or "Keine Drucker eingerichtet")
         failed = failed or code != 0
     return 1 if failed else 0
 
