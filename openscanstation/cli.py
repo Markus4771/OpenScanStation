@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from openscanstation.scanner.manager import ScannerManager
 
-VERSION = "0.6.2"
+VERSION = "0.6.3"
 
 def _format_optional(value: bool | None) -> str:
     if value is None:
@@ -45,7 +45,7 @@ def command_doctor(_args: argparse.Namespace) -> int:
     print(f"OpenScanStation {VERSION}")
     print(f"System: {platform.platform()}")
     print(f"Architektur: {platform.machine()}")
-    checks = ["scanimage", "tesseract", "pdftoppm"]
+    checks = ["scanimage", "tesseract", "pdftoppm", "zbarimg"]
     failed = False
     for command in checks:
         path = shutil.which(command)
