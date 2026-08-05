@@ -17,6 +17,7 @@ SERVICES=(
   openscanstation-classification.service
   openscanstation-copy.service
   openscanstation-hardware.service
+  openscanstation-gateway.service
 )
 
 log() { printf '[OpenScanStation] %s\n' "$*" >&2; }
@@ -111,20 +112,18 @@ start_services() {
 }
 
 wait_for_health() {
-  for attempt in $(seq 1 20); do curl -fsS --max-time 3 "http://127.0.0.1:${WEB_PORT}/health" >/dev/null && return 0; sleep 1; done
+  for attempt in $(seq 1 25); do
+    curl -fsS --max-time 3 "http://127.0.0.1:${WEB_PORT}/health" >/dev/null && return 0
+    sleep 1
+  done
   return 1
 }
 
 show_addresses() {
   local address
   address="$(hostname -I 2>/dev/null | awk '{print $1}')"; address="${address:-SERVER-IP}"
-  log "Hauptoberfläche:       http://${address}:8101"
-  log "Geräteeinstellungen:  http://${address}:8102"
-  log "Speicherziele:        http://${address}:8103"
-  log "Workflows:            http://${address}:8104"
-  log "Dokumenterkennung:    http://${address}:8105"
-  log "Kopieren:             http://${address}:8106"
-  log "Hardware-Zentrale:    http://${address}:8107"
+  log "OpenScanStation: http://${address}:8101"
+  log "Untermenüs: Hardware, Scanner, Drucker, Kopieren, Speicherziele, Workflows und Dokumenterkennung"
 }
 
 install_or_update() {
@@ -138,15 +137,23 @@ install_or_update() {
   log "Installiere ${package_file##*/} ..."
   apt-get install -y "$package_file"
   start_services
-  log "Prüfe Dienst und Haupt-WebGUI ..."
-  if wait_for_health; then log "Installation erfolgreich."; show_addresses; else systemctl --no-pager --full status openscanstation.service || true; fail "Health-Check antwortet nicht. Diagnose: journalctl -u openscanstation.service -n 100 --no-pager"; fi
+  log "Prüfe einheitliche Weboberfläche ..."
+  if wait_for_health; then
+    log "Installation erfolgreich."
+    show_addresses
+  else
+    systemctl --no-pager --full status openscanstation-gateway.service || true
+    fail "Gateway-Health-Check antwortet nicht. Diagnose: journalctl -u openscanstation-gateway.service -n 100 --no-pager"
+  fi
 }
 
 show_status() {
   dpkg-query -W -f='Paket: ${Package}\nVersion: ${Version}\nStatus: ${Status}\n' "$PACKAGE" 2>/dev/null || true
   for service in "${SERVICES[@]}"; do printf '\n=== %s ===\n' "$service"; systemctl --no-pager --full status "$service" 2>/dev/null || true; done
-  printf '\nHealth-Checks:\n'
-  for port in 8101 8102 8103 8104 8105 8106 8107; do printf 'Port %s: ' "$port"; curl -fsS --max-time 3 "http://127.0.0.1:${port}/health" || printf 'nicht erreichbar'; printf '\n'; done
+  printf '\nÖffentlicher Health-Check auf Port 8101: '
+  curl -fsS --max-time 3 "http://127.0.0.1:8101/health" || printf 'nicht erreichbar'
+  printf '\nInterne Module:\n'
+  for port in 8111 8102 8103 8104 8105 8106 8107; do printf '127.0.0.1:%s: ' "$port"; curl -fsS --max-time 3 "http://127.0.0.1:${port}/health" || printf 'nicht erreichbar'; printf '\n'; done
 }
 
 uninstall_package() { apt-get remove -y "$PACKAGE"; log "Scandaten und Einstellungen unter /var/lib/openscanstation wurden nicht gelöscht."; }
