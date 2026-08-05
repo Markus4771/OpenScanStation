@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenScanStation Unified Web Gateway
+After=network-online.target openscanstation.service openscanstation-device-settings.service openscanstation-storage-settings.service openscanstation-workflows.service openscanstation-classification.service openscanstation-copy.service openscanstation-hardware.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/openscanstation
+ExecStart=/usr/bin/openscanstation-gateway --host 0.0.0.0 --port 8101
+Restart=on-failure
+RestartSec=3
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/openscanstation
+
+[Install]
+WantedBy=multi-user.target
