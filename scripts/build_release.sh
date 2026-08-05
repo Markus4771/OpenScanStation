@@ -29,20 +29,36 @@ install -D -m 0755 "$ROOT_DIR/packaging/openscanstation-copy" "$WORK_DIR/package
 install -D -m 0644 "$ROOT_DIR/packaging/openscanstation-copy.service" "$WORK_DIR/package/lib/systemd/system/openscanstation-copy.service"
 install -D -m 0755 "$ROOT_DIR/packaging/openscanstation-hardware" "$WORK_DIR/package/usr/bin/openscanstation-hardware"
 install -D -m 0644 "$ROOT_DIR/packaging/openscanstation-hardware.service" "$WORK_DIR/package/lib/systemd/system/openscanstation-hardware.service"
+install -D -m 0755 "$ROOT_DIR/packaging/openscanstation-gateway" "$WORK_DIR/package/usr/bin/openscanstation-gateway"
+install -D -m 0644 "$ROOT_DIR/packaging/openscanstation-gateway.service" "$WORK_DIR/package/lib/systemd/system/openscanstation-gateway.service"
+
+# Fachmodule sind nur intern erreichbar; extern wird ausschließlich Port 8101 veröffentlicht.
+for unit in \
+  openscanstation-device-settings.service \
+  openscanstation-storage-settings.service \
+  openscanstation-workflows.service \
+  openscanstation-classification.service \
+  openscanstation-copy.service \
+  openscanstation-hardware.service; do
+  sed -i 's/--host 0\.0\.0\.0/--host 127.0.0.1/g' "$WORK_DIR/package/lib/systemd/system/$unit"
+done
+
 install -d -m 0750 "$WORK_DIR/package/var/backups/openscanstation"
 cat >> "$WORK_DIR/package/DEBIAN/postinst" <<'EOF'
 if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload || true
     systemctl enable --now openscanstation-watchdog.timer || true
+    systemctl enable --now openscanstation.service || true
     systemctl enable --now openscanstation-device-settings.service || true
     systemctl enable --now openscanstation-storage-settings.service || true
     systemctl enable --now openscanstation-workflows.service || true
     systemctl enable --now openscanstation-classification.service || true
     systemctl enable --now openscanstation-copy.service || true
     systemctl enable --now openscanstation-hardware.service || true
+    systemctl enable --now openscanstation-gateway.service || true
 fi
 EOF
 dpkg-deb --root-owner-group --build "$WORK_DIR/package" "$NEW_DEB"
 mv "$NEW_DEB" "$DEB_FILE"
 echo "Release-Paket erstellt: $DEB_FILE"
-echo "Enthalten: Hardware-Zentrale, Geräte-, Speicherziel-, Workflow-, Dokumenterkennungs- und Kopier-Webdienste auf Port 8102 bis 8107 sowie Health-Watchdog"
+echo "Einheitlicher Zugriff: http://<VM-IP>:8101 – alle Module als Untermenüs; Zusatzports nur auf localhost"
