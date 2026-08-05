@@ -25,6 +25,8 @@ install -D -m 0755 "$ROOT_DIR/packaging/openscanstation-workflows" "$WORK_DIR/pa
 install -D -m 0644 "$ROOT_DIR/packaging/openscanstation-workflows.service" "$WORK_DIR/package/lib/systemd/system/openscanstation-workflows.service"
 install -D -m 0755 "$ROOT_DIR/packaging/openscanstation-classification" "$WORK_DIR/package/usr/bin/openscanstation-classification"
 install -D -m 0644 "$ROOT_DIR/packaging/openscanstation-classification.service" "$WORK_DIR/package/lib/systemd/system/openscanstation-classification.service"
+install -D -m 0755 "$ROOT_DIR/packaging/openscanstation-copy" "$WORK_DIR/package/usr/bin/openscanstation-copy"
+install -D -m 0644 "$ROOT_DIR/packaging/openscanstation-copy.service" "$WORK_DIR/package/lib/systemd/system/openscanstation-copy.service"
 install -d -m 0750 "$WORK_DIR/package/var/backups/openscanstation"
 cat >> "$WORK_DIR/package/DEBIAN/postinst" <<'EOF'
 if command -v systemctl >/dev/null 2>&1; then
@@ -34,9 +36,10 @@ if command -v systemctl >/dev/null 2>&1; then
     systemctl enable --now openscanstation-storage-settings.service || true
     systemctl enable --now openscanstation-workflows.service || true
     systemctl enable --now openscanstation-classification.service || true
+    systemctl enable --now openscanstation-copy.service || true
 fi
 EOF
 dpkg-deb --root-owner-group --build "$WORK_DIR/package" "$NEW_DEB"
 mv "$NEW_DEB" "$DEB_FILE"
 echo "Release-Paket erstellt: $DEB_FILE"
-echo "Enthalten: Backup, Geräte-, Speicherziel-, Workflow- und Dokumenterkennungs-Webdienste auf Port 8102 bis 8105 sowie Health-Watchdog"
+echo "Enthalten: Geräte-, Speicherziel-, Workflow-, Dokumenterkennungs- und Kopier-Webdienste auf Port 8102 bis 8106 sowie Health-Watchdog"
