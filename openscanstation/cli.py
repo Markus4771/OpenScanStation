@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from openscanstation.scanner.manager import ScannerManager
 
-VERSION = "0.12.2"
+VERSION = "0.12.3"
 
 def _format_optional(value: bool | None) -> str:
     if value is None:
@@ -47,6 +47,31 @@ def command_hardware(_args: argparse.Namespace) -> int:
     print(json.dumps(inventory_fallback(), ensure_ascii=False, indent=2))
     return 0
 
+def command_hardware_check(args: argparse.Namespace) -> int:
+    from openscanstation.hardware_health import load_last_report, run_hardware_checks
+    report = load_last_report() if args.last else run_hardware_checks()
+    if not report:
+        print("Noch kein Hardware-Prüfbericht vorhanden.")
+        return 1
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        summary = report.get("summary", {})
+        print(f"Hardwareprüfung: {summary.get('passed', 0)}/{summary.get('total', 0)} Module OK")
+        for result in report.get("results", []):
+            state = "OK" if result.get("ok") else "FEHLER"
+            duration = result.get("duration_ms", 0)
+            print(f"{state:<7} {result.get('module',''):<18} {duration:>6} ms  {result.get('message','')}")
+    return 0 if report.get("ok") else 1
+
+def command_hardware_refresh(_args: argparse.Namespace) -> int:
+    from openscanstation.hardware_health import clear_hardware_cache
+    from openscanstation.hardware import inventory_fallback
+    result = clear_hardware_cache()
+    inventory = inventory_fallback()
+    print(json.dumps({"cache": result, "inventory": inventory}, ensure_ascii=False, indent=2))
+    return 0
+
 def command_doctor(_args: argparse.Namespace) -> int:
     print(f"OpenScanStation {VERSION}")
     print(f"System: {platform.platform()}")
@@ -80,6 +105,12 @@ def build_parser() -> argparse.ArgumentParser:
     scanners.set_defaults(func=command_scanners)
     hardware = sub.add_parser("hardware", help="Scanner und Drucker als JSON anzeigen")
     hardware.set_defaults(func=command_hardware)
+    hardware_check = sub.add_parser("hardware-check", help="Alle Hardwaremodule getrennt prüfen")
+    hardware_check.add_argument("--json", action="store_true", help="Vollständigen Bericht als JSON ausgeben")
+    hardware_check.add_argument("--last", action="store_true", help="Zuletzt gespeicherten Bericht anzeigen")
+    hardware_check.set_defaults(func=command_hardware_check)
+    hardware_refresh = sub.add_parser("hardware-refresh", help="Hardwarecache löschen und Geräte neu erfassen")
+    hardware_refresh.set_defaults(func=command_hardware_refresh)
     doctor = sub.add_parser("doctor", help="Systemdiagnose ausführen")
     doctor.set_defaults(func=command_doctor)
     return parser
