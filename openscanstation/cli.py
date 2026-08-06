@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from openscanstation.scanner.manager import ScannerManager
 
-VERSION = "0.13.2"
+VERSION = "0.14.0"
 
 def _format_optional(value: bool | None) -> str:
     if value is None:
@@ -45,6 +45,11 @@ def command_scanners(_args: argparse.Namespace) -> int:
 def command_hardware(_args: argparse.Namespace) -> int:
     from openscanstation.hardware import inventory_fallback
     print(json.dumps(inventory_fallback(), ensure_ascii=False, indent=2))
+    return 0
+
+def command_device_center(_args: argparse.Namespace) -> int:
+    from openscanstation.device_center import snapshot
+    print(json.dumps(snapshot(), ensure_ascii=False, indent=2))
     return 0
 
 def command_hardware_check(args: argparse.Namespace) -> int:
@@ -105,6 +110,8 @@ def build_parser() -> argparse.ArgumentParser:
     scanners.set_defaults(func=command_scanners)
     hardware = sub.add_parser("hardware", help="Scanner und Drucker als JSON anzeigen")
     hardware.set_defaults(func=command_hardware)
+    device_center = sub.add_parser("device-center", help="Gerätezentrale als JSON anzeigen")
+    device_center.set_defaults(func=command_device_center)
     hardware_check = sub.add_parser("hardware-check", help="Alle Hardwaremodule getrennt prüfen")
     hardware_check.add_argument("--json", action="store_true", help="Vollständigen Bericht als JSON ausgeben")
     hardware_check.add_argument("--last", action="store_true", help="Zuletzt gespeicherten Bericht anzeigen")
