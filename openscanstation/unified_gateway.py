@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse,http.client,json,re
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit,parse_qs
 from openscanstation.cli import VERSION
 HOST="0.0.0.0";PORT=8101;MAIN_PORT=8111
 ROUTES={"/hardware":8107,"/copy":8106,"/classification":8105,"/workflows":8104,"/storage":8103,"/devices":8102}
@@ -30,8 +30,21 @@ class Handler(BaseHTTPRequestHandler):
   self.send_response(status);self.send_header("Content-Type",ctype);self.send_header("Content-Length",str(len(payload)));self.end_headers()
   try:self.wfile.write(payload)
   except (BrokenPipeError,ConnectionResetError):pass
+ def profile_page(self,message="",error=False):
+  from openscanstation.central_profiles_web import render
+  self.send(rewrite(render(message,error).encode(),""),400 if error else 200)
  def proxy(self):
-  p=urlsplit(self.path);port,target,prefix=route(p.path);target+=('?'+p.query) if p.query else ''
+  p=urlsplit(self.path)
+  if p.path=="/profiles":
+   if self.command=="GET":return self.profile_page()
+  if p.path in {"/central-profiles/save","/central-profiles/delete"} and self.command=="POST":
+   try:
+    n=int(self.headers.get("Content-Length","0") or 0);form=parse_qs(self.rfile.read(n).decode(),keep_blank_values=True);get=lambda k,d="":form.get(k,[d])[0]
+    from openscanstation.profile_service import save_profile,remove_profile
+    if p.path.endswith("save"):save_profile(get,False);return self.profile_page("Profil wurde gespeichert.")
+    remove_profile(get("profile_id"));return self.profile_page("Profil wurde gelöscht.")
+   except Exception as exc:return self.profile_page(str(exc),True)
+  port,target,prefix=route(p.path);target+=('?'+p.query) if p.query else ''
   n=int(self.headers.get("Content-Length","0") or 0);body=self.rfile.read(n) if n else None;headers={k:v for k,v in self.headers.items() if k.lower() not in HOP and k.lower()!='host'};headers['Host']=f'127.0.0.1:{port}'
   conn=None
   try:
