@@ -20,7 +20,7 @@ from openscanstation.scanner.base import (
     ScannerState,
     ScannerStatus,
 )
-from openscanstation.scanner.scan import ScanJob, ScanResult
+from openscanstation.scanner.scan import ScanResult
 
 _DEVICE_PATTERN = re.compile(r"device `(?P<device>[^']+)' is a (?P<label>.+)")
 _MODE_MAP = {"color": "Color", "gray": "Gray", "lineart": "Black & White"}
@@ -51,6 +51,50 @@ class BrotherADSPlugin(ScannerPlugin):
                 devices.append((match.group("device"), match.group("label")))
         return devices
 
+    @staticmethod
+    def _supported_sources(device_name: str) -> list[str]:
+        """Liest die vom aktiven SANE-Backend angebotenen Scanquellen aus."""
+        try:
+            result = subprocess.run(
+                ["scanimage", "--device-name", device_name, "--help"],
+                capture_output=True, text=True, timeout=20,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            return []
+
+        text = (result.stdout or "") + "\n" + (result.stderr or "")
+        sources: list[str] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line.startswith("--source"):
+                continue
+            value_text = line[len("--source"):].strip()
+            value_text = re.sub(r"\s+\[[^\]]*\]\s*$", "", value_text)
+            for value in value_text.split("|"):
+                candidate = value.strip().strip("'\"")
+                if candidate and candidate not in sources:
+                    sources.append(candidate)
+        return sources
+
+    @classmethod
+    def _select_source(cls, device_name: str, duplex: bool) -> str:
+        sources = cls._supported_sources(device_name)
+        if not sources:
+            return ""
+
+        wanted = "duplex" if duplex else "simplex"
+        for source in sources:
+            if wanted in source.casefold():
+                return source
+
+        # Manche Backends nennen Simplex nur "ADF" oder "Document Feeder".
+        if not duplex:
+            for source in sources:
+                lowered = source.casefold()
+                if "adf" in lowered or "feeder" in lowered:
+                    return source
+        return ""
+
     def discover(self) -> list[ScannerInfo]:
         scanners = []
         for device, label in self._device_lines():
@@ -78,7 +122,7 @@ class BrotherADSPlugin(ScannerPlugin):
                         "auto_crop": True,
                         "auto_rotate": True,
                         "multifeed_detection": True,
-                        "preferred_source": "Automatic Document Feeder(centrally aligned,Duplex)",
+                        "source_auto_detection": True,
                     },
                 ),
             ))
@@ -86,6 +130,7 @@ class BrotherADSPlugin(ScannerPlugin):
 
     def get_status(self, device_name: str) -> ScannerStatus:
         backend = "sane-airscan" if device_name.startswith(("airscan:", "escl:")) else "brother-sane"
+        sources = self._supported_sources(device_name)
         return ScannerStatus(
             device=device_name,
             state=ScannerState.READY,
@@ -93,8 +138,15 @@ class BrotherADSPlugin(ScannerPlugin):
             backend=backend,
             scan_supported=True,
             message="Brother ADS ist über SANE erreichbar.",
-            details={"recommended_driver": "sane-airscan oder Brother brscan5"},
+            details={
+                "recommended_driver": "sane-airscan oder Brother brscan5",
+                "sources": sources,
+            },
         )
+
+    @staticmethod
+    def _run_scan(command: list[str]) -> None:
+        subprocess.run(command, check=True, capture_output=True, timeout=900)
 
     def start_scan(self, device_name: str, options: dict) -> ScanResult:
         output = Path(options["output"]).expanduser().resolve()
@@ -116,23 +168,34 @@ class BrotherADSPlugin(ScannerPlugin):
                 "--format=png", "--batch=" + batch_pattern,
                 "--batch-start=1", "--batch-increment=1",
             ]
-            source = options.get("source")
-            if source:
-                command += ["--source", str(source)]
-            elif duplex:
-                command += ["--source", "Automatic Document Feeder(centrally aligned,Duplex)"]
-            else:
-                command += ["--source", "Automatic Document Feeder(centrally aligned,Simplex)"]
+
+            requested_source = str(options.get("source") or "").strip()
+            selected_source = requested_source or self._select_source(device_name, duplex)
+            if selected_source:
+                command += ["--source", selected_source]
             if options.get("brightness") not in (None, ""):
                 command += ["--brightness", str(options["brightness"])]
             if options.get("contrast") not in (None, ""):
                 command += ["--contrast", str(options["contrast"])]
 
             try:
-                subprocess.run(command, check=True, capture_output=True, timeout=900)
+                self._run_scan(command)
             except subprocess.CalledProcessError as exc:
                 message = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else str(exc.stderr or exc.stdout or "")
-                raise RuntimeError(f"Brother-Scan fehlgeschlagen: {message.strip()}") from exc
+                # Treiber unterscheiden sich bei den exakten Source-Namen. Wenn
+                # das Setzen fehlschlägt, nutzt SANE beim zweiten Versuch die
+                # Standardquelle des Geräts.
+                if selected_source and "setting of option --source failed" in message.casefold():
+                    retry = command[:]
+                    source_index = retry.index("--source")
+                    del retry[source_index:source_index + 2]
+                    try:
+                        self._run_scan(retry)
+                    except subprocess.CalledProcessError as retry_exc:
+                        retry_message = retry_exc.stderr.decode("utf-8", errors="replace") if isinstance(retry_exc.stderr, bytes) else str(retry_exc.stderr or retry_exc.stdout or "")
+                        raise RuntimeError(f"Brother-Scan fehlgeschlagen: {retry_message.strip()}") from retry_exc
+                else:
+                    raise RuntimeError(f"Brother-Scan fehlgeschlagen: {message.strip()}") from exc
             except subprocess.TimeoutExpired as exc:
                 raise RuntimeError("Brother-Scan wurde nach 15 Minuten abgebrochen") from exc
 
