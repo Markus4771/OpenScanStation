@@ -42,6 +42,13 @@ class Handler(BaseHTTPRequestHandler):
             from openscanstation.scanner_admin import render as render_scanners
             self.send(render_scanners(), head_only=head_only)
             return
+        if path == "/scanner/config-export":
+            from openscanstation.scanner_admin import configuration
+            body = json.dumps(configuration(), ensure_ascii=False, indent=2) + "\n"
+            self.send(body, ctype="application/json; charset=utf-8",
+                      disposition='attachment; filename="openscanstation-scanners.json"',
+                      head_only=head_only)
+            return
 
         page = render(path)
         if page is not None:
@@ -49,12 +56,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/health":
-            self.send(json.dumps({
-                "status": "ok", "service": "openscanstation-hardware",
-                "version": VERSION, "architecture": "modular",
-            }), ctype="application/json", head_only=head_only)
+            self.send(json.dumps({"status": "ok", "service": "openscanstation-hardware", "version": VERSION, "architecture": "modular"}), ctype="application/json", head_only=head_only)
             return
-
         if path == "/api/hardware":
             from openscanstation.hardware import inventory
             self.send(json.dumps(inventory(), ensure_ascii=False), ctype="application/json", head_only=head_only)
@@ -70,23 +73,18 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/scanners":
             from openscanstation.hardware import inventory
             from openscanstation.scanner_admin import manual_scanners
-            payload = {
-                "automatic": [x for x in inventory().get("devices", []) if x.get("kind") == "scanner"],
-                "manual": manual_scanners(),
-            }
+            from openscanstation.scanner_settings import load_settings
+            payload = {"automatic": [x for x in inventory().get("devices", []) if x.get("kind") == "scanner"], "manual": manual_scanners(), "settings": load_settings()}
             self.send(json.dumps(payload, ensure_ascii=False), ctype="application/json", head_only=head_only)
             return
-
         if path == "/support/download":
             from openscanstation.hardware_actions import latest_support_bundle
             bundle = latest_support_bundle()
             if not bundle:
                 self.send(layout("<section class='panel'><h2>Noch kein Supportpaket vorhanden</h2></section>", "Support", "Kein Paket vorhanden.", True), 404, head_only=head_only)
                 return
-            self.send(bundle.read_bytes(), ctype="application/gzip",
-                      disposition=f'attachment; filename="{bundle.name}"', head_only=head_only)
+            self.send(bundle.read_bytes(), ctype="application/gzip", disposition=f'attachment; filename="{bundle.name}"', head_only=head_only)
             return
-
         if path.startswith("/scanner/") or path.startswith("/printer/"):
             kind = "scanner" if path.startswith("/scanner/") else "printer"
             device_id = unquote(path.split("/", 2)[2])
@@ -100,7 +98,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self.send(layout("<section class='panel'><h2>Gerät konnte nicht geladen werden</h2></section>", "Hardware", str(exc), True), 400, head_only=head_only)
             return
-
         self.send(json.dumps({"error": "not_found", "path": path}), 404, "application/json", head_only=head_only)
 
     def do_GET(self) -> None:
@@ -118,24 +115,24 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path.rstrip("/") or "/"
         try:
             get = self._form()
-
             if path == "/scanner/auto-save":
                 from openscanstation.scanner_admin import render as render_scanners
                 from openscanstation.scanner_settings import update_scanner
                 update_scanner(get("scanner_id"), alias=get("alias"), enabled=get("enabled") == "1", make_default=get("make_default") == "1")
                 self.send(render_scanners("Scanner wurde gespeichert.")); return
-
             if path == "/scanner/auto-hide":
                 from openscanstation.scanner_admin import render as render_scanners
                 from openscanstation.scanner_settings import update_scanner
                 update_scanner(get("scanner_id"), alias="", enabled=False, make_default=False)
-                self.send(render_scanners("Scanner wurde ausgeblendet und kann wiederhergestellt werden.")); return
-
+                self.send(render_scanners("Scanner wurde ausgeblendet.")); return
+            if path == "/scanner/restore":
+                from openscanstation.scanner_admin import render as render_scanners, restore
+                restore(get("scanner_id"))
+                self.send(render_scanners("Scanner wurde wiederhergestellt.")); return
             if path == "/scanner/restore-all":
                 from openscanstation.scanner_admin import render as render_scanners, restore_all_hidden
                 restore_all_hidden()
-                self.send(render_scanners("Alle ausgeblendeten Scanner wurden wiederhergestellt.")); return
-
+                self.send(render_scanners("Alle Scanner wurden wiederhergestellt.")); return
             if path == "/scanner/manual-save":
                 from openscanstation.scanner_admin import render as render_scanners, save_manual_scanner
                 from openscanstation.scanner_settings import load_settings, save_settings
@@ -143,31 +140,30 @@ class Handler(BaseHTTPRequestHandler):
                 if get("make_default") == "1":
                     settings = load_settings(); settings["default_scanner"] = item["id"]; save_settings(settings)
                 self.send(render_scanners("Manueller Scanner wurde gespeichert.")); return
-
             if path == "/scanner/manual-delete":
                 from openscanstation.scanner_admin import delete_manual_scanner, render as render_scanners
                 if get("confirm") != "yes":
                     raise ValueError("Löschen wurde nicht bestätigt")
                 delete_manual_scanner(get("scanner_id"))
                 self.send(render_scanners("Manueller Scanner wurde endgültig gelöscht.")); return
-
+            if path == "/scanner/config-import":
+                from openscanstation.scanner_admin import import_configuration, render as render_scanners
+                result = import_configuration(get("configuration"))
+                self.send(render_scanners(f"Scannerkonfiguration importiert: {result.get('imported', 0)} manuelle Scanner.")); return
             if path == "/scanner/test":
                 from openscanstation.hardware import inventory
                 from openscanstation.scanner_settings import test_connection
                 scanners = [d for d in inventory().get("devices", []) if d.get("kind") == "scanner"]
                 result = test_connection(get("scanner_id"), scanners)
                 self.send(layout(f"<section class='panel'><h2>Verbindungstest</h2><pre>{json.dumps(result, ensure_ascii=False, indent=2)}</pre><a class='button' href='/scanners'>Zurück</a></section>", "Scanner-Test")); return
-
             if path == "/scanner/test-scan":
                 from openscanstation.hardware_actions import test_scan
                 result = test_scan(get("scanner_id"), resolution=int(get("resolution", "300")), mode=get("mode", "Gray"))
                 self.send(layout(f"<section class='panel'><h2>Testscan erfolgreich</h2><pre>{json.dumps(result, ensure_ascii=False, indent=2)}</pre><a class='button' href='/scanners'>Zurück</a></section>", "Testscan", result.get("message", ""))); return
-
             if path == "/scanner/manual-add":
                 from openscanstation.scanner_admin import save_manual_scanner, render as render_scanners
                 save_manual_scanner(get("name"), get("uri"), get("backend"))
                 self.send(render_scanners("Scanner wurde hinzugefügt.")); return
-
             if path == "/profile/save":
                 from openscanstation.hardware_management import save_profile
                 save_profile(get("profile_id"), name=get("name"), resolution=int(get("resolution", "300")), mode=get("mode", "Gray"), duplex=get("duplex") == "1", output_format=get("format", "pdf"), ocr=get("ocr") == "1", remove_blank=get("remove_blank") == "1")
@@ -200,7 +196,6 @@ class Handler(BaseHTTPRequestHandler):
                 from openscanstation.hardware_actions import create_support_bundle
                 result = create_support_bundle()
                 self.send(layout("<section class='panel'><h2>Supportpaket erstellt</h2><a class='button' href='/support/download'>Herunterladen</a></section>", "Support", result.get("message", ""))); return
-
             self.send(json.dumps({"error": "not_found", "path": path}), 404, "application/json")
         except Exception as exc:
             self.send(layout("<section class='panel'><h2>Aktion fehlgeschlagen</h2><a class='button' href='/scanners'>Zur Scannerverwaltung</a></section>", "Hardware", str(exc), True), HTTPStatus.BAD_REQUEST)
