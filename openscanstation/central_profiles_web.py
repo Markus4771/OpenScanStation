@@ -1,0 +1,15 @@
+from __future__ import annotations
+import html
+from openscanstation.profiles import load_profiles
+from openscanstation.profile_service import save_profile, remove_profile
+
+def esc(value, attr=False):
+    return html.escape(str(value), quote=attr)
+
+def render(message="", error=False):
+    cards=[]
+    for pid,p in load_profiles().items():
+        cards.append(f'''<article><h2>{esc(p.get("label",pid))}</h2><form method="post" action="/central-profiles/save"><input type="hidden" name="profile_id" value="{esc(pid,True)}"><label>Name<input name="label" value="{esc(p.get("label",""),True)}"></label><label>DPI<input type="number" name="dpi" value="{p.get("dpi",300)}"></label><label>Modus<select name="mode"><option value="color">Farbe</option><option value="gray">Graustufen</option><option value="lineart">Schwarz-Weiß</option></select></label><label>Format<select name="format"><option>pdf</option><option>png</option><option>jpg</option></select></label><label><input type="checkbox" name="ocr" value="1" {"checked" if p.get("ocr") else ""}> OCR</label><label><input type="checkbox" name="duplex" value="1" {"checked" if p.get("duplex") else ""}> Duplex</label><label>Eigentümer<input name="owner" value="{esc(p.get("owner",""),True)}"></label><label>Sichtbarkeit<select name="visibility"><option value="all">Alle Benutzer</option><option value="users">Ausgewählte Benutzer</option><option value="owner">Nur Eigentümer</option></select></label><label>Benutzer<input name="users" value="{esc(", ".join(p.get("users",[])),True)}"></label><label>Speicherziel<input name="destination" value="{esc(p.get("destination","local"),True)}"></label><label><input type="checkbox" name="show_on_device" value="1" {"checked" if p.get("show_on_device") else ""}> Auf Gerät anzeigen</label><button>Speichern</button></form><form method="post" action="/central-profiles/delete"><input type="hidden" name="profile_id" value="{esc(pid,True)}"><button class="danger">Profil löschen</button></form></article>''')
+    notice=f'<p class="notice {"bad" if error else ""}">{esc(message)}</p>' if message else ''
+    body=notice+'<section><h1>Zentrale Scanprofile</h1><p>Eine Profilverwaltung für Dashboard, Hardware, Benutzer und Geräteanzeige.</p></section><div class="grid">'+''.join(cards)+'</div>'
+    return f'''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Scanprofile</title><style>body{{font-family:system-ui;background:#f3f5f7;margin:0}}main{{max-width:1400px;margin:auto;padding:1rem}}section,article{{background:white;padding:1rem;border-radius:12px;margin-bottom:1rem;box-shadow:0 2px 12px #0001}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:1rem}}form,label{{display:grid;gap:.5rem;margin-bottom:.7rem}}input,select,button{{padding:.7rem}}button{{background:#17202a;color:white;border:0;border-radius:7px}}.danger{{background:#922b21}}.notice{{padding:1rem;background:#d5f5e3}}.bad{{background:#fadbd8}}</style></head><body><main>{body}</main></body></html>'''
