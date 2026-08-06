@@ -38,6 +38,10 @@ class Handler(BaseHTTPRequestHandler):
     def _get(self, head_only: bool = False) -> None:
         path = urlparse(self.path).path.rstrip("/") or "/"
 
+        if path in {"/device-center", "/geraetezentrale"}:
+            from openscanstation.device_center import render as render_device_center
+            self.send(render_device_center(), head_only=head_only)
+            return
         if path == "/scanners":
             from openscanstation.scanner_admin import render as render_scanners
             self.send(render_scanners(), head_only=head_only)
@@ -57,6 +61,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/health":
             self.send(json.dumps({"status": "ok", "service": "openscanstation-hardware", "version": VERSION, "architecture": "modular"}), ctype="application/json", head_only=head_only)
+            return
+        if path == "/api/device-center":
+            from openscanstation.device_center import snapshot
+            self.send(json.dumps(snapshot(), ensure_ascii=False), ctype="application/json", head_only=head_only)
             return
         if path == "/api/hardware":
             from openscanstation.hardware import inventory
