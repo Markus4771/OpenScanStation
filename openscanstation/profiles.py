@@ -60,9 +60,9 @@ def normalize_profile(profile_id: str, raw: object) -> dict:
     }
 
 
-def normalize_profiles(data: object) -> dict:
+def normalize_profiles(data: object, *, defaults_on_invalid: bool = True) -> dict:
     if not isinstance(data, dict):
-        return deepcopy(DEFAULT_PROFILES)
+        return deepcopy(DEFAULT_PROFILES) if defaults_on_invalid else {}
     normalized: dict[str, dict] = {}
     for raw_id, raw_profile in data.items():
         profile_id = str(raw_id).strip().lower()
@@ -70,7 +70,9 @@ def normalize_profiles(data: object) -> dict:
             normalized[profile_id] = normalize_profile(profile_id, raw_profile)
         except ValueError:
             continue
-    return normalized or deepcopy(DEFAULT_PROFILES)
+    if normalized or not defaults_on_invalid:
+        return normalized
+    return deepcopy(DEFAULT_PROFILES)
 
 
 def load_profiles() -> dict:
@@ -81,11 +83,11 @@ def load_profiles() -> dict:
         data = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return deepcopy(DEFAULT_PROFILES)
-    return normalize_profiles(data)
+    return normalize_profiles(data, defaults_on_invalid=False)
 
 
 def save_profiles(profiles: dict) -> dict:
-    normalized = normalize_profiles(profiles)
+    normalized = normalize_profiles(profiles, defaults_on_invalid=False)
     PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix="profiles-", suffix=".json", dir=PROFILE_PATH.parent)
     try:
@@ -103,6 +105,10 @@ def save_profiles(profiles: dict) -> dict:
     return normalized
 
 
+def reset_default_profiles() -> dict:
+    return save_profiles(deepcopy(DEFAULT_PROFILES))
+
+
 def upsert_profile(profile_id: str, profile: dict, *, create_only: bool = False) -> dict:
     profile_id = profile_id.strip().lower()
     normalized_profile = normalize_profile(profile_id, profile)
@@ -117,7 +123,9 @@ def delete_profile(profile_id: str) -> dict:
     profiles = load_profiles()
     if profile_id not in profiles:
         raise ValueError("Scanprofil wurde nicht gefunden")
-    if len(profiles) <= 1:
-        raise ValueError("Das letzte Scanprofil kann nicht gelöscht werden")
     del profiles[profile_id]
     return save_profiles(profiles)
+
+
+def delete_all_profiles() -> dict:
+    return save_profiles({})
