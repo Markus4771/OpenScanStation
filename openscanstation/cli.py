@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from openscanstation.scanner.manager import ScannerManager
 
-VERSION = "0.14.0"
+VERSION = "0.15.0"
 
 def _format_optional(value: bool | None) -> str:
     if value is None:
@@ -50,6 +50,11 @@ def command_hardware(_args: argparse.Namespace) -> int:
 def command_device_center(_args: argparse.Namespace) -> int:
     from openscanstation.device_center import snapshot
     print(json.dumps(snapshot(), ensure_ascii=False, indent=2))
+    return 0
+
+def command_brother_profiles(_args: argparse.Namespace) -> int:
+    from openscanstation.brother_device_profiles import manifest
+    print(json.dumps(manifest(), ensure_ascii=False, indent=2))
     return 0
 
 def command_hardware_check(args: argparse.Namespace) -> int:
@@ -112,6 +117,8 @@ def build_parser() -> argparse.ArgumentParser:
     hardware.set_defaults(func=command_hardware)
     device_center = sub.add_parser("device-center", help="Gerätezentrale als JSON anzeigen")
     device_center.set_defaults(func=command_device_center)
+    brother_profiles = sub.add_parser("brother-profiles", help="Brother-Geräteprofile aus Speicherzielen erzeugen")
+    brother_profiles.set_defaults(func=command_brother_profiles)
     hardware_check = sub.add_parser("hardware-check", help="Alle Hardwaremodule getrennt prüfen")
     hardware_check.add_argument("--json", action="store_true", help="Vollständigen Bericht als JSON ausgeben")
     hardware_check.add_argument("--last", action="store_true", help="Zuletzt gespeicherten Bericht anzeigen")
