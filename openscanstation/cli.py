@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse,json,platform,shutil,subprocess
 from pathlib import Path
 from openscanstation.scanner.manager import ScannerManager
-VERSION="0.16.0"
+VERSION=(Path(__file__).resolve().parent.parent / "version.txt").read_text(encoding="utf-8").strip()
 def command_version(_):print(VERSION);return 0
 def command_scanners(_):
  r=ScannerManager().discover()
