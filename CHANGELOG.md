@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.17.0
+
+- Paperless-ngx als eigener Speicherziel-Typ ergänzt.
+- Konfiguration über Basis-URL, API-Token, TLS-Prüfung sowie optionale IDs für Korrespondent, Dokumenttyp, Speicherpfad und Tags ergänzt.
+- Verbindungstest gegen die authentifizierte Paperless-ngx-API ergänzt.
+- Workflow-Speicherschritt lädt Dokumente als Multipart-Upload zu Paperless-ngx hoch.
+- API-Token wird in öffentlichen Konfigurationsausgaben maskiert.
+- Automatisierte Tests für Konfiguration, Authentifizierung und Dokument-Upload ergänzt.
+
+## 0.16.0
+
+- Zentrale Scanprofilverwaltung vereinheitlicht.
+- Frühere Hardwareprofile werden einmalig nach `profiles.json` migriert.
+- Hardware-Menüpunkt „Scanprofile“ durch „Profilzuordnung“ ersetzt.
+- Profile um Benutzer-, Scanner-, Speicherziel- und Geräteanzeige-Zuordnungen erweitert.
+- Alle Scanprofile können über die Weboberfläche gelöscht werden.
+- Scanneraktionen werden beim Löschen eines verwendeten Profils sicher deaktiviert.
+- Hardware-Zentrale, Brother-Geräteprofile und Geräteverwaltung weiter ausgebaut.
+- Projektstatus und Dokumentation auf den tatsächlichen Stand synchronisiert.
+
 ## 0.5.5
 
 - Kodak-KDS-Laufzeitadapter ergänzt, der das Gerät vor einem Scan nicht mehrfach öffnet.
