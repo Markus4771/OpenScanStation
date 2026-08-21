@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.18.0
+
+- Automatische Registrierung von OpenScanStation als Brother-Scan-to-PC-Tastenziel per SNMP ergänzt.
+- Listener für Brother-Tastenereignisse auf UDP-Port 54925 ergänzt.
+- IMAGE-, EMAIL-, OCR- und FILE-Tasten können vorhandenen OpenScanStation-Scanneraktionen zugeordnet werden.
+- Ereignisse werden ausschließlich von der konfigurierten Scanner-IP akzeptiert.
+- Wiederkehrende Profilregistrierung und Statusprotokoll ergänzt.
+- Eigenen systemd-Dienst und das Kommando `openscanstation-brother-buttons` ergänzt.
+- Installationspaket um die SNMP-Werkzeuge erweitert.
+- CLI-Versionsausgabe mit `version.txt` synchronisiert.
+
 ## 0.17.0
 
 - Paperless-ngx als eigener Speicherziel-Typ ergänzt.
