@@ -1,6 +1,6 @@
 # OpenScanStation
 
-**Version:** 0.17.0
+**Version:** 0.18.0
 
 OpenScanStation ist eine modulare Dokumentenscanner-Plattform für Linux und Debian. Die zentrale Weboberfläche läuft standardmäßig auf Port **8101** und verbindet Scanner, OCR, Dokumenterkennung, Workflows und Speicherziele.
 
@@ -113,3 +113,23 @@ sudo apt install -y ./dist/openscanstation_*.deb
 ## Paperless-ngx
 
 Paperless-ngx kann unter **Speicherziele** als eigener Zieltyp angelegt werden. Benötigt werden die Basis-URL der Paperless-Instanz und ein API-Token. Optional können Korrespondent, Dokumenttyp, Speicherpfad und Tags als numerische Paperless-IDs vorbelegt werden. Ein Workflow mit einem Speicherschritt überträgt das gescannte Dokument anschließend an `/api/documents/post_document/`.
+
+## Brother-Tasten automatisch programmieren
+
+OpenScanStation kann sich experimentell per SNMP als Scan-to-PC-Ziel am Brother registrieren und Tastenereignisse über UDP-Port 54925 empfangen. Dafür müssen Scanner-IP, Server-IP, die interne Scanner-ID und vorhandene Scanneraktionen zugeordnet werden:
+
+```bash
+sudo openscanstation-brother-buttons configure \
+  --scanner-ip 192.168.1.20 \
+  --server-ip 192.168.1.10 \
+  --scanner-id 'brother:brother4:net1;dev0' \
+  --display-name OpenScan \
+  --file-action action-1 \
+  --ocr-action action-3
+
+sudo openscanstation-brother-buttons register
+sudo systemctl enable --now openscanstation-brother-buttons.service
+sudo openscanstation-brother-buttons status
+```
+
+Die Firewall muss UDP-Port 54925 ausschließlich aus dem Scanner-Netz zulassen. Die Registrierung verwendet ein herstellerspezifisches, nicht als stabile öffentliche API dokumentiertes Brother-Protokoll und muss deshalb mit dem konkreten Modell und Firmwarestand geprüft werden.
