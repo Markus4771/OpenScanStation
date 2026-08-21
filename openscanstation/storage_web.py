@@ -26,6 +26,7 @@ TYPE_LABELS = {
     "webdav": "Nextcloud / WebDAV",
     "sftp": "SFTP",
     "email": "E-Mail / SMTP",
+    "paperless": "Paperless-ngx",
 }
 
 
@@ -45,13 +46,14 @@ def _config_fields(target: dict) -> str:
         "webdav": (("url", "WebDAV-URL", "https://cloud.example/remote.php/dav/files/user/Scans"), ("username", "Benutzer", ""), ("password", "Kennwort", ""), ("token", "App-Passwort / Token", "")),
         "sftp": (("host", "Server", "sftp.example"), ("port", "Port", "22"), ("path", "Zielpfad", "/upload"), ("username", "Benutzer", "scanner"), ("password", "Kennwort", ""), ("private_key", "Privater Schlüssel / Pfad", "")),
         "email": (("smtp_host", "SMTP-Server", "mail.example"), ("smtp_port", "Port", "587"), ("smtp_user", "SMTP-Benutzer", ""), ("smtp_password", "SMTP-Kennwort", ""), ("sender", "Absender", "scanner@example"), ("recipient", "Empfänger", "archiv@example")),
+        "paperless": (("url", "Paperless-ngx URL", "https://paperless.example"), ("token", "API-Token", ""), ("correspondent", "Korrespondenten-ID", ""), ("document_type", "Dokumenttyp-ID", ""), ("storage_path", "Speicherpfad-ID", ""), ("tags", "Tag-IDs (kommagetrennt)", "")),
     }[kind]
     rendered = []
     for name, label, placeholder in fields:
         secret = name in {"password", "token", "smtp_password"}
         value = "" if secret else str(config.get(name, ""))
         rendered.append(f'<label>{html.escape(label)}<input name="cfg_{name}" type="{"password" if secret else "text"}" value="{html.escape(value, quote=True)}" placeholder="{html.escape(placeholder, quote=True)}"></label>')
-    if kind == "webdav":
+    if kind in {"webdav", "paperless"}:
         rendered.append(f'<label><span>TLS-Zertifikat prüfen</span><input type="checkbox" name="cfg_verify_tls" value="1" {"checked" if config.get("verify_tls", True) else ""}></label>')
     if kind == "email":
         rendered.append(f'<label><span>STARTTLS verwenden</span><input type="checkbox" name="cfg_starttls" value="1" {"checked" if config.get("starttls", True) else ""}></label>')
@@ -125,7 +127,7 @@ class Handler(BaseHTTPRequestHandler):
             form = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=True)
             if path == "/create":
                 kind = form.get("type", ["local"])[0]
-                defaults = {"local": {"path": "/var/lib/openscanstation/scans"}, "smb": {"host": "server", "share": "scans"}, "webdav": {"url": "https://server/remote.php/dav/files/user/Scans"}, "sftp": {"host": "server", "username": "scanner"}, "email": {"smtp_host": "server", "sender": "scanner@localhost", "recipient": "archiv@localhost"}}[kind]
+                defaults = {"local": {"path": "/var/lib/openscanstation/scans"}, "smb": {"host": "server", "share": "scans"}, "webdav": {"url": "https://server/remote.php/dav/files/user/Scans"}, "sftp": {"host": "server", "username": "scanner"}, "email": {"smtp_host": "server", "sender": "scanner@localhost", "recipient": "archiv@localhost"}, "paperless": {"url": "https://paperless.example", "token": "TOKEN_EINTRAGEN", "verify_tls": True}}[kind]
                 target = _from_form(form)
                 target.update({"enabled": True, "config": defaults})
                 upsert_target(target, create_only=True)

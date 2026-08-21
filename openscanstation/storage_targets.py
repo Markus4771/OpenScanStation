@@ -13,6 +13,7 @@ import shutil
 import smtplib
 import socket
 import tempfile
+import ssl
 from copy import deepcopy
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -21,7 +22,7 @@ from urllib.request import Request, urlopen
 DATA_DIR = Path(os.environ.get("OPENSCANSTATION_DATA_DIR", "/var/lib/openscanstation"))
 TARGETS_FILE = DATA_DIR / "storage_targets.json"
 TARGET_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
-SUPPORTED_TYPES = ("local", "smb", "webdav", "sftp", "email")
+SUPPORTED_TYPES = ("local", "smb", "webdav", "sftp", "email", "paperless")
 SECRET_FIELDS = {"password", "token", "private_key", "smtp_password"}
 
 DEFAULT_TARGETS = {
@@ -51,6 +52,7 @@ def _normalize_config(target_type: str, raw: object) -> dict:
         "webdav": ("url", "username", "password", "token", "verify_tls"),
         "sftp": ("host", "port", "path", "username", "password", "private_key"),
         "email": ("smtp_host", "smtp_port", "smtp_user", "smtp_password", "sender", "recipient", "starttls"),
+        "paperless": ("url", "token", "verify_tls", "correspondent", "document_type", "storage_path", "tags"),
     }[target_type]
     result = {key: config.get(key) for key in allowed if key in config}
     for key in list(result):
@@ -97,12 +99,14 @@ def _validate_required(target_type: str, config: dict) -> None:
         "webdav": ("url",),
         "sftp": ("host", "username"),
         "email": ("smtp_host", "sender", "recipient"),
+        "paperless": ("url", "token"),
     }[target_type]
     missing = [field for field in required if not config.get(field)]
     if missing:
         raise ValueError("Pflichtfelder fehlen: " + ", ".join(missing))
-    if target_type == "webdav" and not str(config["url"]).lower().startswith(("http://", "https://")):
-        raise ValueError("WebDAV-URL muss mit http:// oder https:// beginnen")
+    if target_type in {"webdav", "paperless"} and not str(config["url"]).lower().startswith(("http://", "https://")):
+        label = "WebDAV" if target_type == "webdav" else "Paperless-ngx"
+        raise ValueError(f"{label}-URL muss mit http:// oder https:// beginnen")
 
 
 def _normalize(data: object) -> dict:
@@ -230,6 +234,12 @@ def test_target(target_id: str, timeout: float = 5.0) -> dict:
             with socket.create_connection((config["host"], port), timeout=timeout):
                 pass
             return {"ok": True, "message": f"SFTP-Server auf Port {port} erreichbar"}
+        if kind == "paperless":
+            url = config["url"].rstrip("/") + "/api/"
+            request = Request(url, headers={"Authorization": "Token " + config["token"], "Accept": "application/json"})
+            context = ssl.create_default_context() if config.get("verify_tls", True) else ssl._create_unverified_context()
+            with urlopen(request, timeout=timeout, context=context) as response:
+                return {"ok": 200 <= response.status < 300, "message": f"Paperless-ngx API erreichbar (HTTP {response.status})"}
         port = int(config.get("smtp_port") or 587)
         with smtplib.SMTP(config["smtp_host"], port, timeout=timeout) as smtp:
             smtp.noop()

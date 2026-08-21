@@ -82,3 +82,53 @@ def test_local_connection_test(tmp_path, monkeypatch):
     result = module.test_target("local")
     assert result["ok"] is True
     assert Path(tmp_path / "scans").is_dir()
+
+
+def test_create_and_redact_paperless_target(tmp_path, monkeypatch):
+    module = load_module(tmp_path, monkeypatch)
+    module.upsert_target({
+        "id": "paperless",
+        "name": "Paperless-ngx",
+        "type": "paperless",
+        "enabled": True,
+        "default": False,
+        "config": {
+            "url": "https://paperless.example",
+            "token": "secret-token",
+            "verify_tls": True,
+            "tags": "1,2",
+        },
+    }, create_only=True)
+    target = next(item for item in module.load_targets(public=True)["targets"] if item["id"] == "paperless")
+    assert target["config"]["token"] == "********"
+
+
+def test_paperless_connection_test_uses_token(tmp_path, monkeypatch):
+    module = load_module(tmp_path, monkeypatch)
+    module.upsert_target({
+        "id": "paperless",
+        "name": "Paperless-ngx",
+        "type": "paperless",
+        "enabled": True,
+        "default": False,
+        "config": {"url": "https://paperless.example/", "token": "api-token", "verify_tls": True},
+    }, create_only=True)
+    captured = {}
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+
+    def fake_urlopen(request, **kwargs):
+        captured["url"] = request.full_url
+        captured["authorization"] = request.get_header("Authorization")
+        return Response()
+
+    monkeypatch.setattr(module, "urlopen", fake_urlopen)
+    result = module.test_target("paperless")
+    assert result["ok"] is True
+    assert captured == {
+        "url": "https://paperless.example/api/",
+        "authorization": "Token api-token",
+    }

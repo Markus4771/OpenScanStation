@@ -39,3 +39,54 @@ def test_invalid_step_rejected(tmp_path, monkeypatch):
         assert "nicht unterstützter" in str(exc).lower()
     else:
         raise AssertionError("invalid step accepted")
+
+
+def test_paperless_store_uploads_multipart_document(tmp_path, monkeypatch):
+    storage, workflows = _modules(tmp_path, monkeypatch)
+    source = workflows.SCAN_DIR / "invoice.pdf"
+    source.write_bytes(b"%PDF-test")
+    storage.upsert_target({
+        "id": "paperless",
+        "name": "Paperless-ngx",
+        "type": "paperless",
+        "enabled": True,
+        "default": False,
+        "config": {
+            "url": "https://paperless.example/",
+            "token": "api-token",
+            "verify_tls": True,
+            "document_type": "3",
+            "tags": "4, 5",
+        },
+    }, create_only=True)
+    workflows.upsert_workflow({
+        "id": "paperless-upload",
+        "name": "Paperless Upload",
+        "enabled": True,
+        "steps": [{"type": "store", "enabled": True, "config": {"target_id": "paperless"}}],
+    }, create_only=True)
+    captured = {}
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self): return b'"task-123"'
+
+    def fake_urlopen(request, **kwargs):
+        captured["url"] = request.full_url
+        captured["authorization"] = request.get_header("Authorization")
+        captured["content_type"] = request.get_header("Content-type")
+        captured["body"] = request.data
+        return Response()
+
+    monkeypatch.setattr(workflows, "urlopen", fake_urlopen)
+    run = workflows.execute_workflow("paperless-upload", "invoice.pdf")
+    assert run["status"] == "success"
+    assert captured["url"] == "https://paperless.example/api/documents/post_document/"
+    assert captured["authorization"] == "Token api-token"
+    assert captured["content_type"].startswith("multipart/form-data; boundary=")
+    assert b'name="document"; filename="invoice.pdf"' in captured["body"]
+    assert b'name="document_type"' in captured["body"]
+    assert captured["body"].count(b'name="tags"') == 2
+    assert run["results"][0]["detail"].endswith("task_id=task-123")
