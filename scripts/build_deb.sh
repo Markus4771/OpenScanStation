@@ -26,6 +26,9 @@ cp "$ROOT_DIR/README.md" "$BUILD_DIR/usr/share/doc/openscanstation/README.md"
 cp "$ROOT_DIR/INSTALLATION.md" "$BUILD_DIR/usr/share/doc/openscanstation/INSTALLATION.md"
 cp "$ROOT_DIR/CHANGELOG.md" "$BUILD_DIR/usr/share/doc/openscanstation/CHANGELOG.md"
 cp "$ROOT_DIR/packaging/60-openscanstation-kodak.rules" "$BUILD_DIR/lib/udev/rules.d/60-openscanstation-kodak.rules"
+cp "$ROOT_DIR/packaging/openscanstation-brother-buttons" "$BUILD_DIR/usr/bin/openscanstation-brother-buttons"
+cp "$ROOT_DIR/packaging/openscanstation-brother-buttons.service" "$BUILD_DIR/lib/systemd/system/openscanstation-brother-buttons.service"
+chmod 0755 "$BUILD_DIR/usr/bin/openscanstation-brother-buttons"
 
 if [ -f "$ROOT_DIR/integration/it-projektzentrale.json" ]; then
   cp "$ROOT_DIR/integration/it-projektzentrale.json" "$BUILD_DIR/usr/share/it-projektzentrale/projects/openscanstation.json"
@@ -37,7 +40,7 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: $ARCH
-Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils, tesseract-ocr, tesseract-ocr-deu, poppler-utils, zbar-tools
+Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils, tesseract-ocr, tesseract-ocr-deu, poppler-utils, zbar-tools, snmp
 Maintainer: Markus Ach
 Description: Zentrale Scannerplattform mit einheitlicher WebGUI
  OpenScanStation erkennt Scanner über Plugins und bietet Scanprofile,
@@ -70,6 +73,8 @@ if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload || true
     systemctl enable openscanstation.service || true
     systemctl restart openscanstation.service || true
+    systemctl enable openscanstation-brother-buttons.service || true
+    systemctl restart openscanstation-brother-buttons.service || true
 fi
 exit 0
 EOF
@@ -79,6 +84,8 @@ cat > "$BUILD_DIR/DEBIAN/prerm" <<'EOF'
 #!/bin/sh
 set -e
 if command -v systemctl >/dev/null 2>&1; then
+    systemctl stop openscanstation-brother-buttons.service || true
+    systemctl disable openscanstation-brother-buttons.service || true
     systemctl stop openscanstation.service || true
     systemctl disable openscanstation.service || true
 fi
