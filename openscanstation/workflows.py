@@ -6,6 +6,9 @@ import os
 import shutil
 import smtplib
 import tempfile
+import mimetypes
+import ssl
+import uuid
 from copy import deepcopy
 from datetime import datetime
 from email.message import EmailMessage
@@ -145,6 +148,28 @@ def _safe_filename(value: str) -> str:
     return value[:180] or "scan"
 
 
+
+def _multipart(fields: list[tuple[str, str]], file_field: str, path: Path) -> tuple[bytes, str]:
+    boundary = "----OpenScanStation" + uuid.uuid4().hex
+    chunks: list[bytes] = []
+    for name, value in fields:
+        chunks.extend([
+            f"--{boundary}\r\n".encode(),
+            f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(),
+            str(value).encode("utf-8"),
+            b"\r\n",
+        ])
+    mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    chunks.extend([
+        f"--{boundary}\r\n".encode(),
+        f'Content-Disposition: form-data; name="{file_field}"; filename="{path.name}"\r\n'.encode(),
+        f"Content-Type: {mime}\r\n\r\n".encode(),
+        path.read_bytes(),
+        b"\r\n",
+        f"--{boundary}--\r\n".encode(),
+    ])
+    return b"".join(chunks), boundary
+
 def _store(path: Path, target: dict) -> str:
     cfg = target["config"]
     kind = target["type"]
@@ -163,6 +188,27 @@ def _store(path: Path, target: dict) -> str:
         with urlopen(req, timeout=30) as response:
             if response.status >= 400: raise RuntimeError(f"WebDAV HTTP {response.status}")
         return base + "/" + path.name
+    if kind == "paperless":
+        base = cfg["url"].rstrip("/")
+        fields = []
+        for field in ("title", "correspondent", "document_type", "storage_path"):
+            value = cfg.get(field)
+            if value:
+                fields.append((field, value))
+        for tag in str(cfg.get("tags", "")).split(","):
+            if tag.strip():
+                fields.append(("tags", tag.strip()))
+        body, boundary = _multipart(fields, "document", path)
+        req = Request(base + "/api/documents/post_document/", data=body, method="POST")
+        req.add_header("Authorization", "Token " + cfg["token"])
+        req.add_header("Accept", "application/json")
+        req.add_header("Content-Type", "multipart/form-data; boundary=" + boundary)
+        context = ssl.create_default_context() if cfg.get("verify_tls", True) else ssl._create_unverified_context()
+        with urlopen(req, timeout=60, context=context) as response:
+            if response.status not in {200, 201, 202}:
+                raise RuntimeError(f"Paperless-ngx HTTP {response.status}")
+            task_id = response.read().decode("utf-8", "replace").strip().strip('"')
+        return base + "/api/tasks/?task_id=" + task_id if task_id else base
     if kind == "email":
         msg = EmailMessage(); msg["From"] = cfg["sender"]; msg["To"] = cfg["recipient"]
         msg["Subject"] = "OpenScanStation: " + path.name; msg.set_content("Dokument im Anhang.")
