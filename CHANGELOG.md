@@ -16,6 +16,7 @@
 - Hardware-Menüseiten auf garantiert nichtblockierenden Cachezugriff umgestellt.
 - Separate Scannerverwaltung und Hardware-APIs ebenfalls auf Cachezugriff umgestellt.
 - Brother, Diagnose, Netzwerk, USB und Treiber von Live-Prüfungen beim Seitenaufruf getrennt.
+- Aktive Navigation korrigiert: Hardware-Übersicht wird nur auf ihrer eigenen Seite markiert.
 
 ## 0.18.0
 
