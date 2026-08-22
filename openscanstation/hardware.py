@@ -253,6 +253,25 @@ def _load_disk_cache() -> dict | None:
     return None
 
 
+def cached_inventory() -> dict:
+    """Liefert garantiert ohne Hardwarezugriff den letzten bekannten Stand."""
+    with _cache_lock:
+        cached = _memory_cache.get("inventory")
+        if isinstance(cached, dict):
+            return cached
+    cached = _load_disk_cache()
+    if isinstance(cached, dict):
+        cached["cached"] = True
+        return cached
+    return {
+        "updated_at": "noch nicht ermittelt",
+        "cached": True,
+        "devices": [],
+        "errors": [],
+        "counts": {"scanner": 0, "printer": 0, "online": 0, "disabled": 0, "print_jobs": 0},
+    }
+
+
 def inventory(force: bool = False) -> dict:
     now = time.monotonic()
     with _cache_lock:

@@ -59,9 +59,9 @@ def _device_cards(devices: list[dict]) -> str:
 
 
 def overview() -> str:
-    from openscanstation.hardware import driver_status, inventory
+    from openscanstation.hardware import cached_inventory, driver_status
     from openscanstation.hardware_management import load_profiles
-    data = inventory(); counts = data.get("counts", {}); drivers = driver_status()
+    data = cached_inventory(); counts = data.get("counts", {}); drivers = driver_status()
     content = f'<section class="panel hero"><div><h2>Hardware-Dashboard</h2><p class="muted">Modulare Geräteverwaltung · Version {VERSION}</p></div><div class="actions"><a class="button" href="/setup">Hardware hinzufügen</a><a class="button secondary" href="/monitor">Monitor</a></div></section><div class="metrics"><article class="card"><b>Scanner</b><div class="metric">{counts.get("scanner",0)}</div></article><article class="card"><b>Drucker</b><div class="metric">{counts.get("printer",0)}</div></article><article class="card"><b>Online</b><div class="metric">{counts.get("online",0)}</div></article><article class="card"><b>Treiber</b><div class="metric">{sum(1 for v in drivers.values() if v)}/{len(drivers)}</div></article><article class="card"><b>Profile</b><div class="metric">{len(load_profiles())}</div></article></div><div class="grid">{_device_cards(data.get("devices", []))}</div>'
     return layout(content, "Hardware")
 
@@ -74,16 +74,16 @@ def monitor() -> str:
 
 
 def setup() -> str:
-    from openscanstation.hardware import brother_assistant, inventory, network_discovery
-    data = inventory(); brother = brother_assistant(); network = network_discovery()
-    state = badge("Brother erkannt", "ok") if brother.get("scanner_found") else badge("Brother nicht erkannt", "warn")
-    return layout(f'<section class="panel"><h2>Hardware-Assistent</h2><p>{len(data.get("devices", []))} Geräte, {len(network)} Netzwerkfunde.</p></section><div class="grid"><article class="card"><h2>Brother ADS-2600We</h2>{state}<p>SANE: {"bereit" if brother.get("sane") else "fehlt"} · AirScan: {"bereit" if brother.get("airscan") else "fehlt"}</p><a class="button" href="/brother">Brother-Assistent</a></article><article class="card"><h2>Netzwerkscanner</h2><form method="post" action="/scanner/manual-add"><label>Name<input name="name" required></label><label>URI<input name="uri" required placeholder="http://192.168.0.25/eSCL"></label><label>Backend<select name="backend"><option value="airscan">AirScan</option><option value="escl">eSCL</option><option value="brother">Brother</option><option value="sane-net">SANE net</option></select></label><button>Scanner speichern</button></form></article><article class="card"><h2>IPP-Drucker</h2><form method="post" action="/printer/add"><label>Name<input name="name" required></label><label>URI<input name="uri" required placeholder="ipp://192.168.0.50/ipp/print"></label><button>Drucker einrichten</button></form></article></div>', "Hardware-Assistent")
+    from openscanstation.hardware import cached_inventory
+    data = cached_inventory(); brother_found = any("brother" in json.dumps(device).casefold() for device in data.get("devices", []))
+    state = badge("Brother erkannt", "ok") if brother_found else badge("Brother nicht im Cache", "warn")
+    return layout(f'<section class="panel"><h2>Hardware-Assistent</h2><p>{len(data.get("devices", []))} Geräte im letzten Erkennungsstand.</p></section><div class="grid"><article class="card"><h2>Brother ADS-2600We</h2>{state}<p class="muted">Die Seite verwendet den Hardwarecache und blockiert nicht auf schlafenden Geräten.</p><a class="button" href="/brother">Brother-Assistent</a></article><article class="card"><h2>Netzwerkscanner</h2><form method="post" action="/scanner/manual-add"><label>Name<input name="name" required></label><label>URI<input name="uri" required placeholder="http://192.168.0.25/eSCL"></label><label>Backend<select name="backend"><option value="airscan">AirScan</option><option value="escl">eSCL</option><option value="brother">Brother</option><option value="sane-net">SANE net</option></select></label><button>Scanner speichern</button></form></article><article class="card"><h2>IPP-Drucker</h2><form method="post" action="/printer/add"><label>Name<input name="name" required></label><label>URI<input name="uri" required placeholder="ipp://192.168.0.50/ipp/print"></label><button>Drucker einrichten</button></form></article></div>', "Hardware-Assistent")
 
 
 def scanners() -> str:
-    from openscanstation.hardware import inventory
+    from openscanstation.hardware import cached_inventory
     from openscanstation.hardware_management import manual_scanners
-    data = [d for d in inventory().get("devices", []) if d.get("kind") == "scanner"]
+    data = [d for d in cached_inventory().get("devices", []) if d.get("kind") == "scanner"]
     cards = []
     for d in data:
         sid = str(d.get("id", ""))
@@ -100,8 +100,8 @@ def profiles() -> str:
 
 
 def printers() -> str:
-    from openscanstation.hardware import inventory
-    devices = [d for d in inventory().get("devices", []) if d.get("kind") == "printer"]
+    from openscanstation.hardware import cached_inventory
+    devices = [d for d in cached_inventory().get("devices", []) if d.get("kind") == "printer"]
     cards = "".join(f'<article class="card"><h2>{esc(d.get("name"))}</h2>{badge("Online","ok") if d.get("online") else badge("Offline","bad")}<p><code>{esc(d.get("connection",""))}</code></p><form method="post" action="/printer/test"><input type="hidden" name="printer" value="{esc(d.get("id"),True)}"><button>Testseite</button></form></article>' for d in devices)
     return layout(f'<section class="panel hero"><h2>Drucker</h2><a class="button" href="/setup">Drucker hinzufügen</a></section><div class="grid">{cards or "<article class=\"card\"><h2>Kein Drucker eingerichtet</h2></article>"}</div>', "Drucker")
 

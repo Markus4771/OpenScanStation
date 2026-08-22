@@ -8,7 +8,8 @@ STYLE="""body{font-family:system-ui;margin:0;background:#f3f6f9;color:#17202a}ma
 def esc(v,attr=False): return html.escape(str(v),quote=attr)
 
 def render(notice=""):
-    profiles=load_profiles(); devices=[d for d in inventory().get("devices",[]) if d.get("kind")=="scanner"]
+    from openscanstation.hardware import cached_inventory
+    profiles=load_profiles(); devices=[d for d in cached_inventory().get("devices",[]) if d.get("kind")=="scanner"]
     options=[(str(d.get("id","")),str(d.get("name","Scanner"))) for d in devices]
     cards=[]
     for pid,p in profiles.items():

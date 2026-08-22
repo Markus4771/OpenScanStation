@@ -127,7 +127,8 @@ def _port_open(host: str, port: int, timeout: float = 0.8) -> bool:
 
 
 def monitor_snapshot() -> dict:
-    data = inventory()
+    from openscanstation.hardware import cached_inventory
+    data = cached_inventory()
     tests = hardware_test_status()
     drivers = driver_status()
     manual = []

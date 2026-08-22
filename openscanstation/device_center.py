@@ -61,7 +61,8 @@ def _source_capabilities(device: str) -> dict:
 
 
 def snapshot() -> dict:
-    inv = inventory()
+    from openscanstation.hardware import cached_inventory
+    inv = cached_inventory()
     settings = load_settings()
     stats = _scan_statistics()
     profiles = load_profiles()
