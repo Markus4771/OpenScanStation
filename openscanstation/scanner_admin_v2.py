@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from openscanstation.cli import VERSION
-from openscanstation.hardware import inventory, record_event
+from openscanstation.hardware import cached_inventory, record_event
 from openscanstation.scanner_settings import load_settings, save_settings, update_scanner
 
 DATA_DIR = Path(os.environ.get("OPENSCANSTATION_DATA_DIR", "/var/lib/openscanstation"))
@@ -158,7 +158,7 @@ def _status_badge(value: bool | None) -> str:
 
 
 def render(notice: str = "", error: bool = False) -> str:
-    devices = [d for d in inventory().get("devices", []) if d.get("kind") == "scanner"]
+    devices = [d for d in cached_inventory().get("devices", []) if d.get("kind") == "scanner"]
     settings = load_settings()
     disabled = set(settings.get("disabled", []))
     aliases = settings.get("aliases", {})

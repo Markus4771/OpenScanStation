@@ -34,12 +34,12 @@ class Handler(BaseHTTPRequestHandler):
    if path=="/api/device-center":
     from openscanstation.device_center import snapshot; return self.send(json.dumps(snapshot(),ensure_ascii=False),ctype="application/json",head=head)
    if path=="/api/hardware":
-    from openscanstation.hardware import inventory; return self.send(json.dumps(inventory(),ensure_ascii=False),ctype="application/json",head=head)
+    from openscanstation.hardware import cached_inventory; return self.send(json.dumps(cached_inventory(),ensure_ascii=False),ctype="application/json",head=head)
    if path=="/api/scanners":
-    from openscanstation.hardware import inventory
+    from openscanstation.hardware import cached_inventory
     from openscanstation.scanner_admin import manual_scanners
     from openscanstation.scanner_settings import load_settings
-    return self.send(json.dumps({"automatic":[x for x in inventory().get("devices",[]) if x.get("kind")=="scanner"],"manual":manual_scanners(),"settings":load_settings()},ensure_ascii=False),ctype="application/json",head=head)
+    return self.send(json.dumps({"automatic":[x for x in cached_inventory().get("devices",[]) if x.get("kind")=="scanner"],"manual":manual_scanners(),"settings":load_settings()},ensure_ascii=False),ctype="application/json",head=head)
    if path=="/health": return self.send(json.dumps({"status":"ok","service":"openscanstation-hardware","version":VERSION,"architecture":"modular"}),ctype="application/json",head=head)
    page=render(path)
    if page is not None:return self.send(page,head=head)

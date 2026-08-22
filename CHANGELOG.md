@@ -14,6 +14,7 @@
 - Fehlende Hardware-Routen für Brother-Geräteprofile und deren JSON-Manifest ergänzt.
 - Produktive Scanner-Laufzeit an die Mehrbenutzer-Signatur und Dokumenteigentümer angepasst.
 - Hardware-Menüseiten auf garantiert nichtblockierenden Cachezugriff umgestellt.
+- Separate Scannerverwaltung und Hardware-APIs ebenfalls auf Cachezugriff umgestellt.
 
 ## 0.18.0
 
