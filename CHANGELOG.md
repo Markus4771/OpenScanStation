@@ -19,6 +19,7 @@
 - Aktive Navigation korrigiert: Hardware-Übersicht wird nur auf ihrer eigenen Seite markiert.
 - Webadministration für Brother-Funktionstasten einschließlich SNMP-Registrierung und Ereignisstatus ergänzt.
 - Speicherziel-Dienst erhält gezielte Schreibrechte für Samba-Konfiguration und Kontendatenbank.
+- Brother-To-Network-Buttons können in der Speicher-Weboberfläche einzeln angelegt, zugeordnet und gelöscht werden.
 
 ## 0.18.0
 

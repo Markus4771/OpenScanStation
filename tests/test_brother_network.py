@@ -26,6 +26,26 @@ def test_profile_argument(tmp_path, monkeypatch):
     assert network.parse_profile("rechnung=action-1") == ("rechnung", "action-1")
 
 
+def test_web_profile_management_preserves_other_profiles(tmp_path, monkeypatch):
+    network = module(tmp_path, monkeypatch)
+    network.save_config({"profiles": {"rechnung": "action-1", "archiv": "action-3"}})
+    network.upsert_profile("rechnung", "action-2")
+    assert network.load_config()["profiles"] == {"rechnung": "action-2", "archiv": "action-3"}
+    network.delete_profile("archiv")
+    assert network.load_config()["profiles"] == {"rechnung": "action-2"}
+
+
+def test_last_web_profile_cannot_be_deleted(tmp_path, monkeypatch):
+    network = module(tmp_path, monkeypatch)
+    network.save_config({"profiles": {"rechnung": "action-1"}})
+    try:
+        network.delete_profile("rechnung")
+    except ValueError as exc:
+        assert "Mindestens ein" in str(exc)
+    else:
+        raise AssertionError("last profile deletion must fail")
+
+
 def test_scan_waits_until_file_is_stable(tmp_path, monkeypatch):
     network = module(tmp_path, monkeypatch)
     config = network.save_config({"profiles": {"rechnung": "action-1"}, "settle_seconds": 1})

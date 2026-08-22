@@ -69,9 +69,47 @@ def normalize_config(raw: object) -> dict:
 def save_config(data: dict) -> dict:
     config = normalize_config(data)
     for profile in config["profiles"]:
-        (INBOX_ROOT / profile).mkdir(parents=True, exist_ok=True)
+        _ensure_profile_directory(profile)
     _atomic_write(CONFIG_FILE, config)
     return config
+
+
+def _ensure_profile_directory(profile: str) -> Path:
+    """Create an SMB inbox with the ownership inherited from the share root."""
+    INBOX_ROOT.mkdir(parents=True, exist_ok=True)
+    root_stat = INBOX_ROOT.stat()
+    path = INBOX_ROOT / _profile_name(profile)
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chown(path, root_stat.st_uid, root_stat.st_gid)
+    except (AttributeError, PermissionError):
+        pass
+    os.chmod(path, 0o770)
+    return path
+
+
+def upsert_profile(profile: str, action_id: str) -> dict:
+    name = _profile_name(profile)
+    action = str(action_id or "").strip()[:64]
+    if not action:
+        raise ValueError("Scanneraktion fehlt")
+    try:
+        config = load_config()
+    except ValueError:
+        config = {"enabled": True, "poll_interval": 2, "settle_seconds": 3, "profiles": {}}
+    config["profiles"][name] = action
+    return save_config(config)
+
+
+def delete_profile(profile: str) -> dict:
+    name = _profile_name(profile)
+    config = load_config()
+    if name not in config["profiles"]:
+        raise ValueError("To-Network-Profil wurde nicht gefunden")
+    if len(config["profiles"]) == 1:
+        raise ValueError("Mindestens ein To-Network-Profil muss erhalten bleiben")
+    del config["profiles"][name]
+    return save_config(config)
 
 
 def load_config() -> dict:

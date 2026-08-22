@@ -4,12 +4,19 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import subprocess
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from openscanstation.cli import VERSION
-from openscanstation.brother_network import CONFIG_FILE as BROTHER_NETWORK_CONFIG, load_config as load_brother_network, save_config as save_brother_network, setup_samba
+from openscanstation.brother_network import (
+    delete_profile as delete_brother_network_profile,
+    load_config as load_brother_network,
+    save_config as save_brother_network,
+    setup_samba,
+    upsert_profile as upsert_brother_network_profile,
+)
 from openscanstation.scanner_actions import load_actions
 from openscanstation.storage_targets import (
     SUPPORTED_TYPES,
@@ -35,7 +42,7 @@ TYPE_LABELS = {
 def _layout(content: str, notice: str = "", error: bool = False) -> str:
     note = f'<div class="notice {"error" if error else "success"}">{html.escape(notice)}</div>' if notice else ""
     return f'''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenScanStation Speicherziele</title><style>
-body{{font-family:system-ui,sans-serif;margin:0;background:#f3f5f7;color:#17202a}}header{{background:#17202a;color:white;padding:1.2rem 2rem}}main{{max-width:1200px;margin:1.5rem auto;padding:0 1rem}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem}}.card,.panel{{background:white;border-radius:12px;padding:1.2rem;box-shadow:0 2px 12px #0001;margin-bottom:1rem}}form{{display:grid;gap:.7rem}}label{{display:grid;gap:.25rem;font-weight:700}}input,select,button{{padding:.7rem;border:1px solid #bcc5cc;border-radius:8px}}button{{background:#17202a;color:white;font-weight:700;cursor:pointer}}button.danger{{background:#922b21}}.row{{display:flex;gap:.6rem;flex-wrap:wrap}}.row form{{display:inline-block}}.muted{{color:#65727e;font-size:.9rem}}.notice{{padding:1rem;border-radius:8px;margin-bottom:1rem}}.success{{background:#d5f5e3}}.error{{background:#fadbd8}}code{{overflow-wrap:anywhere}}
+body{{font-family:system-ui,sans-serif;margin:0;background:#f3f5f7;color:#17202a}}header{{background:#17202a;color:white;padding:1.2rem 2rem}}main{{max-width:1200px;margin:1.5rem auto;padding:0 1rem}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem}}.card,.panel{{background:white;border-radius:12px;padding:1.2rem;box-shadow:0 2px 12px #0001;margin-bottom:1rem}}form{{display:grid;gap:.7rem}}label{{display:grid;gap:.25rem;font-weight:700}}input,select,textarea,button{{padding:.7rem;border:1px solid #bcc5cc;border-radius:8px}}textarea{{font:inherit}}button{{background:#17202a;color:white;font-weight:700;cursor:pointer}}button.danger{{background:#922b21}}.row{{display:flex;gap:.6rem;flex-wrap:wrap}}.row form{{display:inline-block}}.muted{{color:#65727e;font-size:.9rem}}.notice{{padding:1rem;border-radius:8px;margin-bottom:1rem}}.success{{background:#d5f5e3}}.error{{background:#fadbd8}}code{{overflow-wrap:anywhere}}
 </style></head><body><header><h1>OpenScanStation · Speicherziele</h1><div>Version {VERSION} · Port {DEFAULT_PORT}</div></header><main>{note}{content}</main></body></html>'''
 
 
@@ -76,10 +83,23 @@ def _page(message: str = "", error: bool = False, username: str = "", is_admin: 
     samba = ""
     if is_admin:
         try:
-            network = load_brother_network(); mappings = "\n".join(f"{name}={action}" for name, action in network["profiles"].items())
+            network = load_brother_network()
         except ValueError:
-            mappings = "rechnung=action-1\narchiv=action-3"
-        samba = f'''<section class="panel"><h2>Lokaler Samba-Eingang für Brother „Scan to Network“</h2><p class="muted">Richtet die geschützte Freigabe <code>OpenScan</code> ein. Eine Zuordnung pro Zeile im Format <code>ordner=action-id</code>.</p><form method="post" action="/samba-setup"><label>SMB-Benutzer<input name="username" value="openscanstation" required></label><label>Neues SMB-Kennwort<input type="password" name="password" minlength="8" required></label><label>Ordner und Aktionen<textarea name="mappings" rows="6" required>{html.escape(mappings)}</textarea></label><button>Samba-Eingang einrichten</button></form></section>'''
+            network = {"profiles": {}}
+
+        def action_options(selected: str = "") -> str:
+            return "".join(
+                f'<option value="{html.escape(action["id"], quote=True)}" {"selected" if action["id"] == selected else ""}>{html.escape(action.get("label", action["id"]))} ({html.escape(action["id"])})</option>'
+                for action in actions if action.get("enabled", True)
+            )
+
+        profile_cards = []
+        for profile, action_id in network["profiles"].items():
+            profile_cards.append(f'''<article class="card"><h3>{html.escape(profile)}</h3><p class="muted">Brother-Pfad: <code>\\\\SERVER-IP\\OpenScan\\{html.escape(profile)}</code></p><form method="post" action="/network-profile/save"><input type="hidden" name="profile" value="{html.escape(profile, quote=True)}"><label>Scanneraktion<select name="action_id" required>{action_options(action_id)}</select></label><button>Zuordnung speichern</button></form><form method="post" action="/network-profile/delete"><input type="hidden" name="profile" value="{html.escape(profile, quote=True)}"><button class="danger">To-Network-Button löschen</button></form></article>''')
+        profile_manager = f'''<section class="panel"><h2>Brother „To Network“-Buttons</h2><p>Lege einen Namen für das Brother-Display fest und ordne ihm eine Scanneraktion zu. Der gleichnamige Samba-Unterordner wird automatisch erzeugt.</p><form method="post" action="/network-profile/save"><label>Button-/Profilname<input name="profile" pattern="[a-z0-9][a-z0-9_-]*" placeholder="rechnung" maxlength="32" required></label><label>Scanneraktion<select name="action_id" required>{action_options()}</select></label><button>To-Network-Button anlegen</button></form></section><div class="grid">{"".join(profile_cards)}</div>'''
+        mappings = "\n".join(f"{name}={action}" for name, action in network["profiles"].items()) or "rechnung=action-1"
+        samba_setup = f'''<section class="panel"><h2>Samba-Freigabe aktivieren</h2><p class="muted">Dieser Schritt richtet die geschützte Freigabe <code>OpenScan</code> und deren Zugang ein. Er ist nach der ersten Einrichtung oder einer Kennwortänderung erforderlich.</p><form method="post" action="/samba-setup"><label>SMB-Benutzer<input name="username" value="openscanstation" required></label><label>Neues SMB-Kennwort<input type="password" name="password" minlength="8" required></label><input type="hidden" name="mappings" value="{html.escape(mappings, quote=True)}"><button>Samba-Freigabe einrichten</button></form></section>'''
+        samba = profile_manager + samba_setup
     return _layout(samba + create + '<div class="grid">' + ''.join(cards) + '</div>', message, error)
 
 
@@ -139,6 +159,26 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Ungültige Formulardaten")
             form = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=True)
             username, is_admin = self.identity()
+            if path == "/network-profile/save":
+                if not is_admin:
+                    raise PermissionError("Administratorrechte erforderlich")
+                profile = form.get("profile", [""])[0]
+                action_id = form.get("action_id", [""])[0]
+                if not any(action["id"] == action_id and action.get("enabled", True) for action in load_actions()["actions"]):
+                    raise ValueError("Scanneraktion wurde nicht gefunden oder ist deaktiviert")
+                upsert_brother_network_profile(profile, action_id)
+                subprocess.run(["systemctl", "restart", "openscanstation-brother-network.service"], check=True, capture_output=True, text=True)
+                page = _page("To-Network-Button wurde gespeichert.", username=username, is_admin=is_admin)
+                self._send(page.encode(), "text/html; charset=utf-8")
+                return
+            if path == "/network-profile/delete":
+                if not is_admin:
+                    raise PermissionError("Administratorrechte erforderlich")
+                delete_brother_network_profile(form.get("profile", [""])[0])
+                subprocess.run(["systemctl", "restart", "openscanstation-brother-network.service"], check=True, capture_output=True, text=True)
+                page = _page("To-Network-Button wurde gelöscht.", username=username, is_admin=is_admin)
+                self._send(page.encode(), "text/html; charset=utf-8")
+                return
             if path == "/samba-setup":
                 if not is_admin:
                     raise PermissionError("Administratorrechte erforderlich")
