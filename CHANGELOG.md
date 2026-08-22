@@ -18,6 +18,7 @@
 - Brother, Diagnose, Netzwerk, USB und Treiber von Live-Prüfungen beim Seitenaufruf getrennt.
 - Aktive Navigation korrigiert: Hardware-Übersicht wird nur auf ihrer eigenen Seite markiert.
 - Webadministration für Brother-Funktionstasten einschließlich SNMP-Registrierung und Ereignisstatus ergänzt.
+- Speicherziel-Dienst erhält gezielte Schreibrechte für Samba-Konfiguration und Kontendatenbank.
 
 ## 0.18.0
 

@@ -14,7 +14,8 @@ RestartSec=5
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/openscanstation
+ReadWritePaths=/var/lib/openscanstation /var/lib/samba /etc/samba
+ReadWritePaths=-/run/samba
 NoNewPrivileges=true
 
 [Install]
