@@ -27,6 +27,8 @@ class Handler(BaseHTTPRequestHandler):
     from openscanstation.profile_assignment import render as page; return self.send(page(),head=head)
    if path=="/brother-profiles":
     from openscanstation.brother_device_profiles import render as page; return self.send(page(),head=head)
+   if path=="/brother-buttons":
+    from openscanstation.brother_buttons_web import render as page; return self.send(page(),head=head)
    if path=="/api/brother-device-profiles":
     from openscanstation.brother_device_profiles import manifest; return self.send(json.dumps(manifest(),ensure_ascii=False),ctype="application/json",head=head)
    if path=="/api/profiles":
@@ -53,6 +55,12 @@ class Handler(BaseHTTPRequestHandler):
  def do_POST(self):
   path=urlparse(self.path).path.rstrip("/") or "/"; form=self._form(); one=lambda k,d="":form.get(k,[d])[0]
   try:
+   if path=="/brother-buttons/save":
+    from openscanstation.brother_buttons_web import render as page,save_from_form
+    save_from_form(one); return self.send(page("Brother-Tastenkonfiguration wurde gespeichert."))
+   if path=="/brother-buttons/register":
+    from openscanstation.brother_buttons_web import register_now,render as page
+    result=register_now(); return self.send(page("Registrierung erfolgreich." if result.get("registered") else "Registrierung fehlgeschlagen.",not result.get("registered")))
    if path=="/profile-assignment/save":
     from openscanstation.profile_assignment import save,render as page
     save(one("profile_id"),one("owner"),one("visibility","all"),one("users"),one("destination","local"),one("show_on_device")=="1",int(one("device_order","10")),form.get("scanner",[])); return self.send(page("Zuordnung wurde gespeichert."))
