@@ -15,6 +15,7 @@
 - Produktive Scanner-Laufzeit an die Mehrbenutzer-Signatur und Dokumenteigentümer angepasst.
 - Hardware-Menüseiten auf garantiert nichtblockierenden Cachezugriff umgestellt.
 - Separate Scannerverwaltung und Hardware-APIs ebenfalls auf Cachezugriff umgestellt.
+- Brother, Diagnose, Netzwerk, USB und Treiber von Live-Prüfungen beim Seitenaufruf getrennt.
 
 ## 0.18.0
 

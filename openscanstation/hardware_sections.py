@@ -59,10 +59,11 @@ def _device_cards(devices: list[dict]) -> str:
 
 
 def overview() -> str:
-    from openscanstation.hardware import cached_inventory, driver_status
+    from openscanstation.hardware import cached_inventory
+    from openscanstation.hardware_health import load_last_report
     from openscanstation.hardware_management import load_profiles
-    data = cached_inventory(); counts = data.get("counts", {}); drivers = driver_status()
-    content = f'<section class="panel hero"><div><h2>Hardware-Dashboard</h2><p class="muted">Modulare Geräteverwaltung · Version {VERSION}</p></div><div class="actions"><a class="button" href="/setup">Hardware hinzufügen</a><a class="button secondary" href="/monitor">Monitor</a></div></section><div class="metrics"><article class="card"><b>Scanner</b><div class="metric">{counts.get("scanner",0)}</div></article><article class="card"><b>Drucker</b><div class="metric">{counts.get("printer",0)}</div></article><article class="card"><b>Online</b><div class="metric">{counts.get("online",0)}</div></article><article class="card"><b>Treiber</b><div class="metric">{sum(1 for v in drivers.values() if v)}/{len(drivers)}</div></article><article class="card"><b>Profile</b><div class="metric">{len(load_profiles())}</div></article></div><div class="grid">{_device_cards(data.get("devices", []))}</div>'
+    data = cached_inventory(); counts = data.get("counts", {}); report = load_last_report(); driver_result = next((x for x in report.get("results", []) if x.get("module") == "drivers"), {}); driver_count = len(driver_result.get("details", {})) if driver_result.get("ok") else 0
+    content = f'<section class="panel hero"><div><h2>Hardware-Dashboard</h2><p class="muted">Modulare Geräteverwaltung · Version {VERSION} · Cache: {esc(data.get("updated_at","-"))}</p></div><div class="actions"><a class="button" href="/setup">Hardware hinzufügen</a><a class="button secondary" href="/monitor">Monitor</a></div></section><div class="metrics"><article class="card"><b>Scanner</b><div class="metric">{counts.get("scanner",0)}</div></article><article class="card"><b>Drucker</b><div class="metric">{counts.get("printer",0)}</div></article><article class="card"><b>Online</b><div class="metric">{counts.get("online",0)}</div></article><article class="card"><b>Treiber-Prüfung</b><div class="metric">{driver_count}</div></article><article class="card"><b>Profile</b><div class="metric">{len(load_profiles())}</div></article></div><div class="grid">{_device_cards(data.get("devices", []))}</div>'
     return layout(content, "Hardware")
 
 
@@ -107,21 +108,24 @@ def printers() -> str:
 
 
 def network() -> str:
-    from openscanstation.hardware import network_discovery
-    rows = "".join(f'<tr><td>{esc(d.get("name"))}</td><td>{esc(d.get("protocol"))}</td><td><code>{esc(d.get("uri"))}</code></td></tr>' for d in network_discovery()) or '<tr><td colspan="3">Keine Netzwerkgeräte gefunden.</td></tr>'
+    from openscanstation.hardware import cached_inventory
+    devices = [d for d in cached_inventory().get("devices", []) if str(d.get("connection", "")).startswith(("http", "airscan", "escl", "ipp"))]
+    rows = "".join(f'<tr><td>{esc(d.get("name"))}</td><td>{esc(d.get("backend"))}</td><td><code>{esc(d.get("connection"))}</code></td></tr>' for d in devices) or '<tr><td colspan="3">Keine Netzwerkgeräte im Cache.</td></tr>'
     return layout(f'<section class="panel"><h2>Netzwerkgeräte</h2><form method="post" action="/network/probe"><label>IP oder Hostname<input name="host" required></label><button>Ports prüfen</button></form></section><section class="panel"><table><tr><th>Name</th><th>Protokoll</th><th>URI</th></tr>{rows}</table></section>', "Netzwerk")
 
 
 def usb() -> str:
-    from openscanstation.hardware import usb_devices
-    rows = "".join(f'<tr><td>{esc(d.get("bus"))}</td><td>{esc(d.get("device"))}</td><td><code>{esc(d.get("id"))}</code></td><td>{esc(d.get("description"))}</td></tr>' for d in usb_devices()) or '<tr><td colspan="4">Keine USB-Geräte.</td></tr>'
+    from openscanstation.hardware import cached_inventory
+    devices = [d for d in cached_inventory().get("devices", []) if "usb" in str(d.get("connection", "")).lower()]
+    rows = "".join(f'<tr><td>-</td><td>-</td><td><code>{esc(d.get("id"))}</code></td><td>{esc(d.get("name"))}</td></tr>' for d in devices) or '<tr><td colspan="4">Keine USB-Geräte im Cache.</td></tr>'
     return layout(f'<section class="panel"><h2>USB-Geräte</h2><table><tr><th>Bus</th><th>Gerät</th><th>ID</th><th>Beschreibung</th></tr>{rows}</table></section>', "USB")
 
 
 def brother() -> str:
-    from openscanstation.hardware import brother_assistant
-    data = brother_assistant(); recommendations = "".join(f'<li>{esc(x)}</li>' for x in data.get("recommendations", []))
-    return layout(f'<section class="panel"><h2>Brother ADS-2600We</h2><div class="actions">{badge("SANE","ok" if data.get("sane") else "bad")}{badge("AirScan","ok" if data.get("airscan") else "bad")}{badge("Brother-Treiber","ok" if data.get("driver") else "warn")}</div><ol>{recommendations}</ol></section>', "Brother")
+    from openscanstation.hardware import cached_inventory
+    devices = [d for d in cached_inventory().get("devices", []) if "brother" in json.dumps(d).casefold()]
+    cards = _device_cards(devices)
+    return layout(f'<section class="panel"><h2>Brother ADS-2600We</h2><p class="muted">Anzeige aus dem Hardwarecache; beim Öffnen wird kein Scannerzugriff gestartet.</p></section><div class="grid">{cards}</div>', "Brother")
 
 
 def maintenance() -> str:
@@ -135,14 +139,17 @@ def maintenance() -> str:
 
 
 def drivers() -> str:
-    from openscanstation.hardware import driver_status
-    rows = "".join(f'<tr><td>{esc(k)}</td><td>{badge("Bereit","ok") if v else badge("Fehlt","bad")}</td></tr>' for k, v in driver_status().items())
+    from openscanstation.hardware_health import load_last_report
+    result = next((x for x in load_last_report().get("results", []) if x.get("module") == "drivers"), {})
+    rows = f'<tr><td>Letzte Prüfung</td><td>{badge("Bereit","ok") if result.get("ok") else badge("Nicht geprüft","warn")}</td></tr>'
     return layout(f'<section class="panel"><h2>Treiber</h2><table>{rows}</table></section>', "Treiber")
 
 
 def diagnostics() -> str:
-    from openscanstation.hardware import diagnostics as collect
-    blocks = "".join(f'<section class="panel"><h2>{esc(k)}</h2><pre>{esc(json.dumps(v,ensure_ascii=False,indent=2))}</pre></section>' for k, v in collect().items())
+    from openscanstation.hardware import cached_inventory
+    from openscanstation.hardware_health import load_last_report
+    values = {"hardware_cache": cached_inventory(), "last_health_report": load_last_report()}
+    blocks = "".join(f'<section class="panel"><h2>{esc(k)}</h2><pre>{esc(json.dumps(v,ensure_ascii=False,indent=2))}</pre></section>' for k, v in values.items())
     return layout(blocks, "Diagnose")
 
 
