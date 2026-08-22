@@ -19,6 +19,7 @@ SERVICES=(
   openscanstation-hardware.service
   openscanstation-gateway.service
   openscanstation-brother-buttons.service
+  openscanstation-brother-network.service
 )
 
 log() { printf '[OpenScanStation] %s\n' "$*" >&2; }
@@ -38,7 +39,7 @@ install_base_dependencies() {
     ca-certificates curl git python3 python3-pil python3-usb dpkg-dev \
     sane-utils sane-airscan usbutils \
     tesseract-ocr tesseract-ocr-deu poppler-utils zbar-tools \
-    cups cups-client printer-driver-all snmp
+    cups cups-client printer-driver-all snmp samba smbclient
   systemctl enable --now cups.service || true
 }
 

@@ -33,15 +33,18 @@ def _connect() -> sqlite3.Connection:
             ocr_status TEXT NOT NULL DEFAULT 'offen'
         )
     """)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(documents)")}
+    if "owner" not in columns:
+        db.execute("ALTER TABLE documents ADD COLUMN owner TEXT NOT NULL DEFAULT ''")
     db.commit()
     return db
 
 
-def add_document(filename: str, title: str, scanner: str, profile: str, fmt: str, pages: int = 1, tags: list[str] | None = None) -> int:
+def add_document(filename: str, title: str, scanner: str, profile: str, fmt: str, pages: int = 1, tags: list[str] | None = None, owner: str = "") -> int:
     with _connect() as db:
         cur = db.execute(
-            "INSERT OR REPLACE INTO documents(filename,title,scanner,profile,format,pages,created_at,tags) VALUES(?,?,?,?,?,?,?,?)",
-            (filename, title, scanner, profile, fmt, pages, datetime.now().isoformat(timespec="seconds"), json.dumps(tags or [], ensure_ascii=False)),
+            "INSERT OR REPLACE INTO documents(filename,title,scanner,profile,format,pages,created_at,tags,owner) VALUES(?,?,?,?,?,?,?,?,?)",
+            (filename, title, scanner, profile, fmt, pages, datetime.now().isoformat(timespec="seconds"), json.dumps(tags or [], ensure_ascii=False), owner),
         )
         db.commit()
         return int(cur.lastrowid)
@@ -56,22 +59,32 @@ def rename_document(old_filename: str, new_filename: str) -> None:
         db.commit()
 
 
-def list_documents(query: str = "", limit: int = 100) -> list[dict]:
+def list_documents(query: str = "", limit: int = 100, owner: str | None = None) -> list[dict]:
     with _connect() as db:
+        owner_sql = " AND owner=?" if owner is not None else ""
+        owner_args = (owner,) if owner is not None else ()
         if query:
             needle = f"%{query}%"
             rows = db.execute(
-                "SELECT * FROM documents WHERE title LIKE ? OR filename LIKE ? OR scanner LIKE ? OR tags LIKE ? OR ocr_text LIKE ? ORDER BY id DESC LIMIT ?",
-                (needle, needle, needle, needle, needle, limit),
+                "SELECT * FROM documents WHERE (title LIKE ? OR filename LIKE ? OR scanner LIKE ? OR tags LIKE ? OR ocr_text LIKE ?)" + owner_sql + " ORDER BY id DESC LIMIT ?",
+                (needle, needle, needle, needle, needle) + owner_args + (limit,),
             ).fetchall()
         else:
-            rows = db.execute("SELECT * FROM documents ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+            rows = db.execute("SELECT * FROM documents" + (" WHERE owner=?" if owner is not None else "") + " ORDER BY id DESC LIMIT ?", owner_args + (limit,)).fetchall()
     result = []
     for row in rows:
         item = dict(row)
         item["tags"] = json.loads(item.get("tags") or "[]")
         result.append(item)
     return result
+
+
+def document_access(filename: str, username: str, is_admin: bool = False) -> bool:
+    if is_admin:
+        return True
+    with _connect() as db:
+        row = db.execute("SELECT owner FROM documents WHERE filename=?", (filename,)).fetchone()
+    return bool(row and row["owner"] == username)
 
 
 def _ocr_image(source: Path, language: str) -> str:

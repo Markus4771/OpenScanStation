@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from openscanstation.cli import VERSION
+from openscanstation.brother_network import CONFIG_FILE as BROTHER_NETWORK_CONFIG, load_config as load_brother_network, save_config as save_brother_network, setup_samba
 from openscanstation.scanner_actions import load_actions
 from openscanstation.storage_targets import (
     SUPPORTED_TYPES,
@@ -16,6 +17,7 @@ from openscanstation.storage_targets import (
     load_targets,
     test_target,
     upsert_target,
+    targets_for_user,
 )
 
 DEFAULT_HOST = "0.0.0.0"
@@ -60,18 +62,25 @@ def _config_fields(target: dict) -> str:
     return "".join(rendered)
 
 
-def _page(message: str = "", error: bool = False) -> str:
-    targets = load_targets()["targets"]
+def _page(message: str = "", error: bool = False, username: str = "", is_admin: bool = False) -> str:
+    targets = targets_for_user(username, is_admin)["targets"]
     actions = load_actions()["actions"]
     cards = []
     for target in targets:
         used = [a.get("label", a["id"]) for a in actions if a.get("destination") == target["id"]]
         types = ''.join(f'<option value="{kind}" {"selected" if kind == target["type"] else ""}>{TYPE_LABELS[kind]}</option>' for kind in SUPPORTED_TYPES)
         delete = '<p class="muted">Das Ziel wird von Scanneraktionen verwendet.</p>' if used else f'<form method="post" action="/delete"><input type="hidden" name="id" value="{html.escape(target["id"], quote=True)}"><button class="danger">Löschen</button></form>'
-        cards.append(f'''<article class="card"><h2>{html.escape(target['name'])}</h2><p><code>{html.escape(target['id'])}</code> · {TYPE_LABELS[target['type']]}</p><form method="post" action="/save"><input type="hidden" name="id" value="{html.escape(target['id'], quote=True)}"><label>Name<input name="name" value="{html.escape(target['name'], quote=True)}" required></label><label>Typ<select name="type">{types}</select></label><label><span>Aktiv</span><input type="checkbox" name="enabled" value="1" {"checked" if target['enabled'] else ""}></label><label><span>Standardziel</span><input type="checkbox" name="default" value="1" {"checked" if target['default'] else ""}></label>{_config_fields(target)}<button>Speichern</button></form><div class="row"><form method="post" action="/test"><input type="hidden" name="id" value="{html.escape(target['id'], quote=True)}"><button>Verbindung testen</button></form>{delete}</div>{f'<p class="muted">Verwendet von: {html.escape(", ".join(used))}</p>' if used else ''}</article>''')
+        cards.append(f'''<article class="card"><h2>{html.escape(target['name'])}</h2><p><code>{html.escape(target['id'])}</code> · {TYPE_LABELS[target['type']]}</p><form method="post" action="/save"><input type="hidden" name="id" value="{html.escape(target['id'], quote=True)}"><label>Name<input name="name" value="{html.escape(target['name'], quote=True)}" required></label><label>Typ<select name="type">{types}</select></label><label><span>Aktiv</span><input type="checkbox" name="enabled" value="1" {"checked" if target['enabled'] else ""}></label><label><span>Standardziel</span><input type="checkbox" name="default" value="1" {"checked" if target['default'] else ""}></label><label><span>Mit anderen Benutzern teilen</span><input type="checkbox" name="shared" value="1" {"checked" if target.get('shared') else ""}></label>{_config_fields(target)}<button>Speichern</button></form><div class="row"><form method="post" action="/test"><input type="hidden" name="id" value="{html.escape(target['id'], quote=True)}"><button>Verbindung testen</button></form>{delete}</div>{f'<p class="muted">Verwendet von: {html.escape(", ".join(used))}</p>' if used else ''}</article>''')
     create_types = ''.join(f'<option value="{kind}">{TYPE_LABELS[kind]}</option>' for kind in SUPPORTED_TYPES)
     create = f'''<section class="panel"><h2>Neues Speicherziel</h2><p class="muted">Nach dem Anlegen können die typspezifischen Felder bearbeitet werden.</p><form method="post" action="/create"><label>Ziel-ID<input name="id" pattern="[a-z0-9][a-z0-9_-]*" placeholder="nextcloud" required></label><label>Name<input name="name" placeholder="Nextcloud Dokumente" required></label><label>Typ<select name="type">{create_types}</select></label><button>Ziel anlegen</button></form></section>'''
-    return _layout(create + '<div class="grid">' + ''.join(cards) + '</div>', message, error)
+    samba = ""
+    if is_admin:
+        try:
+            network = load_brother_network(); mappings = "\n".join(f"{name}={action}" for name, action in network["profiles"].items())
+        except ValueError:
+            mappings = "rechnung=action-1\narchiv=action-3"
+        samba = f'''<section class="panel"><h2>Lokaler Samba-Eingang für Brother „Scan to Network“</h2><p class="muted">Richtet die geschützte Freigabe <code>OpenScan</code> ein. Eine Zuordnung pro Zeile im Format <code>ordner=action-id</code>.</p><form method="post" action="/samba-setup"><label>SMB-Benutzer<input name="username" value="openscanstation" required></label><label>Neues SMB-Kennwort<input type="password" name="password" minlength="8" required></label><label>Ordner und Aktionen<textarea name="mappings" rows="6" required>{html.escape(mappings)}</textarea></label><button>Samba-Eingang einrichten</button></form></section>'''
+    return _layout(samba + create + '<div class="grid">' + ''.join(cards) + '</div>', message, error)
 
 
 def _from_form(form: dict[str, list[str]], existing: dict | None = None) -> dict:
@@ -93,11 +102,15 @@ def _from_form(form: dict[str, list[str]], existing: dict | None = None) -> dict
         "type": form.get("type", [existing.get("type", "local")])[0],
         "enabled": form.get("enabled", ["0"])[0] == "1",
         "default": form.get("default", ["0"])[0] == "1",
+        "owner": existing.get("owner", ""),
+        "shared": form.get("shared", ["0"])[0] == "1",
         "config": config,
     }
 
 
 class Handler(BaseHTTPRequestHandler):
+    def identity(self):
+        return self.headers.get("X-OpenScanStation-User", ""), self.headers.get("X-OpenScanStation-Role", "") == "admin"
     def _send(self, body: bytes, content_type: str, status: HTTPStatus = HTTPStatus.OK):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
@@ -110,11 +123,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/":
-            self._send(_page().encode(), "text/html; charset=utf-8")
+            user, admin = self.identity(); self._send(_page(username=user, is_admin=admin).encode(), "text/html; charset=utf-8")
         elif path == "/health":
             self._send(json.dumps({"status": "ok", "service": "openscanstation-storage", "version": VERSION}).encode(), "application/json")
         elif path == "/api/storage-targets":
-            self._send(json.dumps(load_targets(public=True), ensure_ascii=False, indent=2).encode(), "application/json; charset=utf-8")
+            user, admin = self.identity(); self._send(json.dumps(targets_for_user(user, admin, public=True), ensure_ascii=False, indent=2).encode(), "application/json; charset=utf-8")
         else:
             self._send(b'{"error":"not_found"}', "application/json", HTTPStatus.NOT_FOUND)
 
@@ -125,28 +138,44 @@ class Handler(BaseHTTPRequestHandler):
             if length <= 0 or length > 65536:
                 raise ValueError("Ungültige Formulardaten")
             form = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=True)
+            username, is_admin = self.identity()
+            if path == "/samba-setup":
+                if not is_admin:
+                    raise PermissionError("Administratorrechte erforderlich")
+                mappings = {}
+                for line in form.get("mappings", [""])[0].splitlines():
+                    if not line.strip(): continue
+                    if "=" not in line: raise ValueError("Zuordnung muss ordner=action-id entsprechen")
+                    name, action = line.split("=", 1); mappings[name.strip()] = action.strip()
+                config = save_brother_network({"profiles": mappings})
+                setup_samba(config, form.get("username", ["openscanstation"])[0], form.get("password", [""])[0])
+                page = _page("Samba-Eingang wurde eingerichtet.", username=username, is_admin=is_admin)
+                self._send(page.encode(), "text/html; charset=utf-8")
+                return
             if path == "/create":
                 kind = form.get("type", ["local"])[0]
                 defaults = {"local": {"path": "/var/lib/openscanstation/scans"}, "smb": {"host": "server", "share": "scans"}, "webdav": {"url": "https://server/remote.php/dav/files/user/Scans"}, "sftp": {"host": "server", "username": "scanner"}, "email": {"smtp_host": "server", "sender": "scanner@localhost", "recipient": "archiv@localhost"}, "paperless": {"url": "https://paperless.example", "token": "TOKEN_EINTRAGEN", "verify_tls": True}}[kind]
                 target = _from_form(form)
                 target.update({"enabled": True, "config": defaults})
+                target["owner"] = username
                 upsert_target(target, create_only=True)
-                page = _page("Speicherziel wurde angelegt.")
+                page = _page("Speicherziel wurde angelegt.", username=username, is_admin=is_admin)
             elif path == "/save":
                 target_id = form.get("id", [""])[0]
                 existing = next((item for item in load_targets()["targets"] if item["id"] == target_id), None)
                 if not existing:
                     raise ValueError("Speicherziel nicht gefunden")
                 upsert_target(_from_form(form, existing))
-                page = _page("Speicherziel wurde gespeichert.")
+                if not is_admin and existing.get("owner") not in {"", username}: raise PermissionError("Speicherziel gehoert einem anderen Benutzer")
+                page = _page("Speicherziel wurde gespeichert.", username=username, is_admin=is_admin)
             elif path == "/delete":
                 target_id = form.get("id", [""])[0]
                 used = [a.get("label", a["id"]) for a in load_actions()["actions"] if a.get("destination") == target_id]
                 delete_target(target_id, used_by=used)
-                page = _page("Speicherziel wurde gelöscht.")
+                page = _page("Speicherziel wurde gelöscht.", username=username, is_admin=is_admin)
             elif path == "/test":
                 result = test_target(form.get("id", [""])[0])
-                page = _page(result["message"], not result["ok"])
+                page = _page(result["message"], not result["ok"], username=username, is_admin=is_admin)
             else:
                 self._send(b'{"error":"not_found"}', "application/json", HTTPStatus.NOT_FOUND)
                 return

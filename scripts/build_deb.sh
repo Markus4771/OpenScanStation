@@ -31,8 +31,10 @@ cp "$ROOT_DIR/packaging/openscanstation-brother-buttons" "$BUILD_DIR/usr/bin/ope
 cp "$ROOT_DIR/packaging/openscanstation-brother-buttons.service" "$BUILD_DIR/lib/systemd/system/openscanstation-brother-buttons.service"
 cp "$ROOT_DIR/packaging/openscanstation-brother-network" "$BUILD_DIR/usr/bin/openscanstation-brother-network"
 cp "$ROOT_DIR/packaging/openscanstation-brother-network.service" "$BUILD_DIR/lib/systemd/system/openscanstation-brother-network.service"
+cp "$ROOT_DIR/packaging/openscanstation-users" "$BUILD_DIR/usr/bin/openscanstation-users"
 chmod 0755 "$BUILD_DIR/usr/bin/openscanstation-brother-buttons"
 chmod 0755 "$BUILD_DIR/usr/bin/openscanstation-brother-network"
+chmod 0755 "$BUILD_DIR/usr/bin/openscanstation-users"
 
 if [ -f "$ROOT_DIR/integration/it-projektzentrale.json" ]; then
   cp "$ROOT_DIR/integration/it-projektzentrale.json" "$BUILD_DIR/usr/share/it-projektzentrale/projects/openscanstation.json"
@@ -44,7 +46,7 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: $ARCH
-Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils, tesseract-ocr, tesseract-ocr-deu, poppler-utils, zbar-tools, snmp, samba
+Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils, tesseract-ocr, tesseract-ocr-deu, poppler-utils, zbar-tools, snmp, samba, smbclient
 Maintainer: Markus Ach
 Description: Zentrale Scannerplattform mit einheitlicher WebGUI
  OpenScanStation erkennt Scanner über Plugins und bietet Scanprofile,

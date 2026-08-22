@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.19.0
+
+- Lokale Konten mit Administrator- und Benutzerrolle ergänzt.
+- PBKDF2-Passwort-Hashing und signierte, zeitlich begrenzte Web-Sitzungen ergänzt.
+- Ersteinrichtung, Login, Logout und Benutzerverwaltung am zentralen Gateway ergänzt.
+- Interne Benutzer-/Rollen-Header werden ausschließlich vom Gateway gesetzt.
+- Dokumente und Speicherziele erhalten einen Eigentümer; Benutzer sehen standardmäßig nur eigene Inhalte.
+- Speicherziele können privat oder gemeinsam freigegeben werden.
+- SMB/NAS-Verbindungstest prüft Anmeldung, Freigabe und Unterordner mit `smbclient`.
+- Workflow-Ausgabe auf SMB/NAS ist aktiv; Kennwörter erscheinen nicht in der Prozessliste.
+- Kommando `openscanstation-users` für lokale Konten ergänzt.
+
 ## 0.18.0
 
 - Automatische Registrierung von OpenScanStation als Brother-Scan-to-PC-Tastenziel per SNMP ergänzt.

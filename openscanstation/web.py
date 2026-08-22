@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from openscanstation.cli import VERSION
-from openscanstation.documents import SCAN_DIR, add_document, list_documents, run_ocr
+from openscanstation.documents import SCAN_DIR, add_document, document_access, list_documents, run_ocr
 from openscanstation.profiles import (
     ALLOWED_DPI,
     ALLOWED_FORMATS,
@@ -112,7 +112,7 @@ def _perform_scan(form: dict[str, list[str]]) -> dict:
             "mode": mode,
             "duplex": bool(profile.get("duplex")),
         })
-    add_document(filename, title, scanner.name, profile_id, output_format, 1, tags)
+    add_document(filename, title, scanner.name, profile_id, output_format, 1, tags, form.get("owner", [""])[0])
     ocr_error = ""
     if do_ocr:
         try:
@@ -129,7 +129,7 @@ def _perform_scan(form: dict[str, list[str]]) -> dict:
     }
 
 
-def _perform_action(scanner_id: str, action_id: str) -> dict:
+def _perform_action(scanner_id: str, action_id: str, owner: str = "") -> dict:
     action = action_by_id(action_id)
     if not action or not action.get("enabled"):
         raise ValueError("Scanneraktion ist nicht aktiviert")
@@ -138,6 +138,7 @@ def _perform_action(scanner_id: str, action_id: str) -> dict:
         "profile": [action.get("profile", "dokument")],
         "title": [action.get("title", action.get("label", "Dokument"))],
         "tags": [", ".join(action.get("tags", []))],
+        "owner": [owner],
     }
     return _perform_scan(form)
 
@@ -150,8 +151,9 @@ body{{font-family:system-ui,sans-serif;margin:0;background:#f3f5f7;color:#17202a
 </style></head><body><header><h1>OpenScanStation</h1><div>Version {VERSION} · Port {DEFAULT_PORT}</div><nav><a href="/">Dashboard</a><a href="/documents">Dokumente</a><a href="/profiles">Scanprofile</a><a href="/scanner-actions">Scanneraktionen</a><a href="/system">System</a><a href="/api/scanners">API</a></nav></header><main>{note}{content}</main></body></html>'''
 
 
-def _dashboard(message: str = "", error: bool = False) -> str:
+def _dashboard(message: str = "", error: bool = False, username: str = "", is_admin: bool = False, allowed_scanners: set[str] | None = None) -> str:
     payload = _scanner_payload()
+    if not is_admin and allowed_scanners is not None: payload["scanners"] = [s for s in payload["scanners"] if s["id"] in allowed_scanners]
     profiles = load_profiles()
     actions = [a for a in load_actions()["actions"] if a.get("enabled")]
     cards, options, dpis = [], [], set()
@@ -171,7 +173,7 @@ def _dashboard(message: str = "", error: bool = False) -> str:
     if options:
         form = f'''<form method="post" action="/scan"><div class="form-grid"><label>Titel<input name="title" value="Dokument"></label><label>Scanner<select name="scanner_id">{''.join(options)}</select></label><label>Profil<select name="profile">{profile_options}</select></label><label>Auflösung<select name="dpi">{dpi_options}</select></label><label>Farbmodus<select name="mode"><option value="color">Farbe</option><option value="gray">Graustufen</option><option value="lineart">Schwarz/Weiß</option></select></label><label>Format<select name="format"><option value="pdf">PDF</option><option value="png">PNG</option><option value="jpg">JPEG</option></select></label><label>Tags<input name="tags" placeholder="Rechnung, Kunde"></label><label>OCR<select name="ocr"><option value="1">Aktiv</option><option value="0">Aus</option></select></label></div><button type="submit">Scan starten</button></form>'''
         action_buttons = ''.join(f'''<article class="card action-card"><h3>{a['slot']}: {html.escape(a['label'])}</h3><p>{html.escape(a['title'])} · Profil {html.escape(a['profile'])}</p><form method="post" action="/run-action"><label>Scanner<select name="scanner_id">{''.join(options)}</select></label><input type="hidden" name="action_id" value="{html.escape(a['id'], quote=True)}"><button>Aktion starten</button></form></article>''' for a in actions)
-    docs = list_documents(limit=10)
+    docs = list_documents(limit=10, owner=None if is_admin else username)
     rows = ''.join(f'<tr><td><a href="/scans/{quote(d["filename"])}">{html.escape(d["title"])}</a></td><td>{html.escape(d["scanner"])}</td><td>{html.escape(d["created_at"])}</td><td>{html.escape(d["ocr_status"])}</td></tr>' for d in docs) or '<tr><td colspan="4">Noch keine Dokumente.</td></tr>'
     updated = html.escape(payload.get("updated_at") or "noch nicht abgeschlossen")
     content = f'<section class="panel"><h2>Schnellaktionen</h2><div class="grid">{action_buttons or "<p>Keine aktiven Scanneraktionen oder kein Scanner verfügbar.</p>"}</div></section><section class="panel"><h2>Freier Scan</h2>{form}</section><div class="headline"><h2>Scanner</h2><form class="inline-form" method="post" action="/refresh-scanners"><button>Scanner neu suchen</button></form></div><p class="muted">Scannerstatus: {updated} · automatische Aktualisierung alle 10 Sekunden</p><div class="grid">{"".join(cards)}</div><section class="panel"><h2>Letzte Dokumente</h2><table><tr><th>Titel</th><th>Scanner</th><th>Zeit</th><th>OCR</th></tr>{rows}</table></section>'
@@ -263,8 +265,8 @@ def _delete_profile_from_form(form: dict[str, list[str]]) -> dict:
     return delete_profile(profile_id)
 
 
-def _documents_page(query: str = "", message: str = "", error: bool = False) -> str:
-    docs = list_documents(query=query)
+def _documents_page(query: str = "", message: str = "", error: bool = False, username: str = "", is_admin: bool = False) -> str:
+    docs = list_documents(query=query, owner=None if is_admin else username)
     rows = ''.join(f'''<tr><td><a href="/scans/{quote(d['filename'])}">{html.escape(d['title'])}</a><div class="muted">{html.escape(d['filename'])}</div></td><td>{html.escape(d['scanner'])}</td><td>{html.escape(', '.join(d['tags']))}</td><td>{html.escape(d['ocr_status'])}</td><td><form method="post" action="/ocr"><input type="hidden" name="filename" value="{html.escape(d['filename'], quote=True)}"><button>OCR starten</button></form></td></tr>''' for d in docs) or '<tr><td colspan="5">Keine Treffer.</td></tr>'
     content = f'''<section class="panel"><h2>Dokumentensuche</h2><form method="get" action="/documents"><div class="form-grid"><label>Suchbegriff<input name="q" value="{html.escape(query, quote=True)}" placeholder="Titel, Tag oder OCR-Text"></label></div><button>Suchen</button></form></section><section class="panel"><table><tr><th>Dokument</th><th>Scanner</th><th>Tags</th><th>OCR</th><th>Aktion</th></tr>{rows}</table></section>'''
     return _layout(content, "Dokumente", message, error)
@@ -278,6 +280,10 @@ def _system_page() -> str:
 
 
 class Handler(BaseHTTPRequestHandler):
+    def identity(self):
+        return self.headers.get("X-OpenScanStation-User", ""), self.headers.get("X-OpenScanStation-Role", "") == "admin"
+    def allowed_scanners(self):
+        return {value for value in self.headers.get("X-OpenScanStation-Scanners", "").split(",") if value}
     server_version = f"OpenScanStation/{VERSION}"
 
     def _send(self, body: bytes, ctype: str, status: HTTPStatus = HTTPStatus.OK, disposition: str | None = None):
@@ -301,10 +307,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        username, is_admin = self.identity()
         if path == "/":
-            self._html(_dashboard())
+            self._html(_dashboard(username=username, is_admin=is_admin, allowed_scanners=self.allowed_scanners()))
         elif path == "/documents":
-            self._html(_documents_page(parse_qs(parsed.query).get("q", [""])[0]))
+            self._html(_documents_page(parse_qs(parsed.query).get("q", [""])[0], username=username, is_admin=is_admin))
         elif path == "/profiles":
             self._html(_profiles_page())
         elif path == "/scanner-actions":
@@ -322,7 +329,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/profiles":
             self._json({"profiles": load_profiles()})
         elif path == "/api/documents":
-            self._json({"documents": list_documents(parse_qs(parsed.query).get("q", [""])[0])})
+            self._json({"documents": list_documents(parse_qs(parsed.query).get("q", [""])[0], owner=None if is_admin else username)})
         elif path == "/api/system":
             self._json({"version": VERSION, **system_payload()})
         elif path.startswith("/scans/"):
@@ -330,6 +337,8 @@ class Handler(BaseHTTPRequestHandler):
             if not _SAFE_FILE.fullmatch(name):
                 return self._json({"error": "invalid_filename"}, HTTPStatus.BAD_REQUEST)
             target = SCAN_DIR / name
+            if not document_access(name, username, is_admin):
+                return self._json({"error": "forbidden"}, HTTPStatus.FORBIDDEN)
             if not target.is_file():
                 return self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
             types = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
@@ -348,14 +357,16 @@ class Handler(BaseHTTPRequestHandler):
             if length <= 0 or length > 65536:
                 raise ValueError("Ungültige Formulardaten")
             form = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=True)
+            username, is_admin = self.identity(); form["owner"] = [username]
+            if path in {"/scan", "/run-action"} and not is_admin and form.get("scanner_id", [""])[0] not in self.allowed_scanners(): raise PermissionError("Scanner ist diesem Benutzer nicht zugeordnet")
             if path == "/scan":
                 result = _perform_scan(form)
                 msg = f"Scan erfolgreich: {result['filename']}" + (f"; OCR-Hinweis: {result['ocr_error']}" if result["ocr_error"] else "")
-                self._html(_dashboard(msg))
+                self._html(_dashboard(msg, username=username, is_admin=is_admin))
                 return
             if path == "/run-action":
-                result = _perform_action(form.get("scanner_id", [""])[0], form.get("action_id", [""])[0])
-                self._html(_dashboard(f"Scanneraktion erfolgreich: {result['filename']}"))
+                result = _perform_action(form.get("scanner_id", [""])[0], form.get("action_id", [""])[0], username)
+                self._html(_dashboard(f"Scanneraktion erfolgreich: {result['filename']}", username=username, is_admin=is_admin))
                 return
             if path == "/scanner-actions/save":
                 _save_action(form)
@@ -377,8 +388,9 @@ class Handler(BaseHTTPRequestHandler):
                 filename = form.get("filename", [""])[0]
                 if not _SAFE_FILE.fullmatch(filename):
                     raise ValueError("Ungültiger Dateiname")
+                if not document_access(filename, username, is_admin): raise PermissionError("Kein Zugriff auf dieses Dokument")
                 run_ocr(filename)
-                self._html(_documents_page(message=f"OCR abgeschlossen: {filename}"))
+                self._html(_documents_page(message=f"OCR abgeschlossen: {filename}", username=username, is_admin=is_admin))
                 return
             self._json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
         except Exception as exc:

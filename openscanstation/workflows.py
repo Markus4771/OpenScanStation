@@ -8,6 +8,7 @@ import smtplib
 import tempfile
 import mimetypes
 import ssl
+import subprocess
 import uuid
 from copy import deepcopy
 from datetime import datetime
@@ -16,7 +17,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 from openscanstation.documents import SCAN_DIR, rename_document, run_ocr
-from openscanstation.storage_targets import target_by_id
+from openscanstation.storage_targets import smb_auth_file, target_by_id
 
 DATA_DIR = Path(os.environ.get("OPENSCANSTATION_DATA_DIR", "/var/lib/openscanstation"))
 WORKFLOWS_FILE = DATA_DIR / "workflows.json"
@@ -188,6 +189,20 @@ def _store(path: Path, target: dict) -> str:
         with urlopen(req, timeout=30) as response:
             if response.status >= 400: raise RuntimeError(f"WebDAV HTTP {response.status}")
         return base + "/" + path.name
+    if kind == "smb":
+        port = int(cfg.get("port") or 445)
+        auth = smb_auth_file(cfg)
+        try:
+            command = ["smbclient", f'//{cfg["host"]}/{cfg["share"]}', "-A", str(auth), "-p", str(port)]
+            if cfg.get("path"):
+                command.extend(["-D", str(cfg["path"])])
+            command.extend(["-c", f'put "{path}" "{path.name}"'])
+            result = subprocess.run(command, capture_output=True, text=True, timeout=120)
+            if result.returncode != 0:
+                raise RuntimeError((result.stderr or result.stdout or "SMB-Uebertragung fehlgeschlagen").strip())
+        finally:
+            auth.unlink(missing_ok=True)
+        return f'smb://{cfg["host"]}/{cfg["share"]}/{str(cfg.get("path") or "").strip("/")}/{path.name}'
     if kind == "paperless":
         base = cfg["url"].rstrip("/")
         fields = []

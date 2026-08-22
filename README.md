@@ -1,6 +1,6 @@
 # OpenScanStation
 
-**Version:** 0.18.0
+**Version:** 0.19.0
 
 OpenScanStation ist eine modulare Dokumentenscanner-Plattform für Linux und Debian. Die zentrale Weboberfläche läuft standardmäßig auf Port **8101** und verbindet Scanner, OCR, Dokumenterkennung, Workflows und Speicherziele.
 
@@ -23,6 +23,9 @@ OpenScanStation ist eine modulare Dokumentenscanner-Plattform für Linux und Deb
 - Kopiermodul
 - Backup, Wiederherstellung, Diagnose und Supportpaket
 - Debian-Paket, systemd-Dienste und GitHub-basierter Updater
+- lokale Konten mit Administrator- und Benutzerrolle
+- private oder gemeinsam freigegebene Speicherziele
+- aktive Ausgabe in SMB-/NAS-Ordner
 
 ## Architektur
 
@@ -77,6 +80,20 @@ Weboberfläche:
 
 ```text
 http://IP-DES-SERVERS:8101
+```
+
+Beim ersten Aufruf erscheint die Ersteinrichtung für das erste lokale Administratorkonto. Danach ist der zentrale Zugang durch Anmeldung geschützt. Administratoren verwalten Konten unter **Benutzer**. Jeder Benutzer wählt unter **Meine Scanner** seine Geräte und verwaltet eigene Scanprofile und Speicherziele.
+
+## Lokale Ordner und NAS-Ausgabe
+
+Unter **Verarbeitung → Speicherziele** können lokale Ordner und SMB-/NAS-Ziele angelegt werden. Ein Ziel kann privat bleiben oder mit anderen Benutzern geteilt werden. Der Verbindungstest prüft bei SMB nicht nur Port 445, sondern Anmeldung, Freigabe und Unterordner. Ein Workflow mit Speicherschritt überträgt die Datei anschließend mit `smbclient` zum NAS.
+
+Der Administrator kann auf derselben Seite den lokalen Samba-Eingang `OpenScan` für native Brother-Profile konfigurieren. Ordner werden dort vorhandenen Scanneraktionen zugeordnet, beispielsweise `rechnung=action-1`.
+
+Alternativ kann das erste Konto auf der Konsole angelegt werden:
+
+```bash
+sudo openscanstation-users create admin --role admin --display-name Administrator
 ```
 
 Die produktiven Daten liegen standardmäßig unter `/var/lib/openscanstation`.

@@ -12,6 +12,7 @@ import re
 import shutil
 import smtplib
 import socket
+import subprocess
 import tempfile
 import ssl
 from copy import deepcopy
@@ -88,6 +89,8 @@ def _normalize_target(raw: object) -> dict:
         "type": target_type,
         "enabled": bool(raw.get("enabled", True)),
         "default": bool(raw.get("default", False)),
+        "owner": _text(raw.get("owner"), 32).lower(),
+        "shared": bool(raw.get("shared", False)),
         "config": config,
     }
 
@@ -196,6 +199,32 @@ def target_by_id(target_id: str) -> dict | None:
     return next((item for item in load_targets()["targets"] if item["id"] == target_id), None)
 
 
+def targets_for_user(username: str, is_admin: bool = False, *, public: bool = False) -> dict:
+    data = load_targets(public=public)
+    if is_admin:
+        return data
+    data["targets"] = [item for item in data["targets"] if item.get("shared") or not item.get("owner") or item.get("owner") == username]
+    return data
+
+
+def smb_auth_file(config: dict):
+    """Erzeugt eine kurzlebige smbclient-Authentifizierungsdatei."""
+    handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", prefix="oss-smb-", delete=False)
+    try:
+        handle.write("username = " + str(config.get("username", "")) + "\n")
+        handle.write("password = " + str(config.get("password", "")) + "\n")
+        if config.get("domain"):
+            handle.write("domain = " + str(config["domain"]) + "\n")
+        handle.close()
+        os.chmod(handle.name, 0o600)
+        return Path(handle.name)
+    except Exception:
+        handle.close()
+        try: os.unlink(handle.name)
+        except OSError: pass
+        raise
+
+
 def redact_targets(data: dict) -> dict:
     result = deepcopy(data)
     for target in result.get("targets", []):
@@ -222,9 +251,12 @@ def test_target(target_id: str, timeout: float = 5.0) -> dict:
             return {"ok": os.access(path, os.W_OK), "message": f"Lokaler Pfad erreichbar; {usage.free} Bytes frei"}
         if kind == "smb":
             port = int(config.get("port") or 445)
-            with socket.create_connection((config["host"], port), timeout=timeout):
-                pass
-            return {"ok": True, "message": f"SMB-Server auf Port {port} erreichbar"}
+            auth = smb_auth_file(config)
+            try:
+                result = subprocess.run(["smbclient", f'//{config["host"]}/{config["share"]}', "-A", str(auth), "-p", str(port), "-D", str(config.get("path") or ""), "-c", "ls"], capture_output=True, text=True, timeout=max(5, int(timeout)))
+            finally:
+                auth.unlink(missing_ok=True)
+            return {"ok": result.returncode == 0, "message": "SMB-Ziel erreichbar" if result.returncode == 0 else (result.stderr or result.stdout).strip()[:1000]}
         if kind == "webdav":
             request = Request(config["url"], method="OPTIONS")
             with urlopen(request, timeout=timeout) as response:
