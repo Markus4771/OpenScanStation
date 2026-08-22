@@ -15,7 +15,7 @@ from email.message import EmailMessage
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-from openscanstation.documents import SCAN_DIR, run_ocr
+from openscanstation.documents import SCAN_DIR, rename_document, run_ocr
 from openscanstation.storage_targets import target_by_id
 
 DATA_DIR = Path(os.environ.get("OPENSCANSTATION_DATA_DIR", "/var/lib/openscanstation"))
@@ -242,7 +242,12 @@ def execute_workflow(workflow_id: str, filename: str, *, title: str = "Dokument"
                 new_name = _safe_filename(template.format(**context))
                 if "." not in Path(new_name).name: new_name += path.suffix
                 new_path = path.with_name(new_name)
-                if new_path != path: path.rename(new_path); path = new_path; context["filename"] = path.name
+                if new_path != path:
+                    old_name = path.name
+                    path.rename(new_path)
+                    path = new_path
+                    rename_document(old_name, path.name)
+                    context["filename"] = path.name
                 detail = path.name
             elif kind == "store":
                 target = target_by_id(cfg.get("target_id", "local"))

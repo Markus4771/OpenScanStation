@@ -10,6 +10,10 @@
 - Eigenen systemd-Dienst und das Kommando `openscanstation-brother-buttons` ergänzt.
 - Installationspaket um die SNMP-Werkzeuge erweitert.
 - CLI-Versionsausgabe mit `version.txt` synchronisiert.
+- Native Brother-Profile „Scan to Network“ ueber eine geschuetzte SMB-Freigabe ergaenzt.
+- Konfigurierbare Netzwerk-Eingangsordner koennen vorhandenen Scanneraktionen zugeordnet werden.
+- Eingehende Dateien werden erst nach stabiler Dateigroesse uebernommen, katalogisiert und durch den Workflow der Aktion verarbeitet.
+- Eigenes Kommando `openscanstation-brother-network`, Statusprotokoll und systemd-Dienst ergaenzt.
 
 ## 0.17.0
 

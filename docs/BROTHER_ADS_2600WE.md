@@ -60,3 +60,21 @@ Unterstützt werden:
 Druckerspezifische Funktionen wie Heften, Lochen oder Broschürendruck können
 später als CUPS-Optionen ergänzt werden. Ihre Verfügbarkeit hängt von der
 PPD-/IPP-Beschreibung des jeweiligen Druckers ab.
+
+## Native Taste „to Network“
+
+OpenScanStation stellt dafuer die SMB-Freigabe `OpenScan` bereit. Die Unterordner
+werden vorhandenen Scanneraktionen zugeordnet:
+
+```bash
+sudo openscanstation-brother-network configure \
+  --profile rechnung=action-1 \
+  --profile archiv=action-3
+sudo openscanstation-brother-network setup-samba \
+  --username openscanstation
+sudo systemctl enable --now openscanstation-brother-network.service
+```
+
+Brother-Webverwaltung: `Scan` -> `Scan to FTP/Network` -> Profiltyp `Network`.
+Als Host wird die OpenScanStation-IP, als Freigabe `OpenScan` und als
+Speicherordner `rechnung` beziehungsweise `archiv` eingetragen.

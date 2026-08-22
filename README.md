@@ -133,3 +133,20 @@ sudo openscanstation-brother-buttons status
 ```
 
 Die Firewall muss UDP-Port 54925 ausschließlich aus dem Scanner-Netz zulassen. Die Registrierung verwendet ein herstellerspezifisches, nicht als stabile öffentliche API dokumentiertes Brother-Protokoll und muss deshalb mit dem konkreten Modell und Firmwarestand geprüft werden.
+
+## Brother „Scan to Network“
+
+Native Brother-Netzwerkprofile koennen Dateien direkt in eine SMB-Freigabe von OpenScanStation schreiben. Jeder Unterordner wird einer vorhandenen Scanneraktion zugeordnet; deren Workflow verarbeitet die bereits vom Brother erzeugte Datei, ohne einen zweiten Scan zu starten.
+
+```bash
+sudo openscanstation-brother-network configure \
+  --profile rechnung=action-1 \
+  --profile archiv=action-3
+
+sudo openscanstation-brother-network setup-samba \
+  --username openscanstation
+
+sudo systemctl enable --now openscanstation-brother-network.service
+```
+
+Das SMB-Passwort wird dabei verdeckt abgefragt. Im Brother-Webinterface wird pro Profil `Network` gewaehlt. Server ist die IP von OpenScanStation, Freigabe `OpenScan`, Speicherordner beispielsweise `rechnung` oder `archiv` und Benutzer `openscanstation`. Der Status des letzten Imports ist mit `sudo openscanstation-brother-network status` abrufbar.

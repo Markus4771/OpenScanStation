@@ -17,7 +17,8 @@ mkdir -p \
   "$BUILD_DIR/lib/systemd/system" \
   "$BUILD_DIR/usr/share/doc/openscanstation" \
   "$BUILD_DIR/usr/share/it-projektzentrale/projects" \
-  "$BUILD_DIR/var/lib/openscanstation/scans"
+  "$BUILD_DIR/var/lib/openscanstation/scans" \
+  "$BUILD_DIR/var/lib/openscanstation/network-inbox"
 
 cp -a "$ROOT_DIR/openscanstation" "$BUILD_DIR/opt/openscanstation/"
 cp -a "$ROOT_DIR/plugins" "$BUILD_DIR/opt/openscanstation/"
@@ -28,7 +29,10 @@ cp "$ROOT_DIR/CHANGELOG.md" "$BUILD_DIR/usr/share/doc/openscanstation/CHANGELOG.
 cp "$ROOT_DIR/packaging/60-openscanstation-kodak.rules" "$BUILD_DIR/lib/udev/rules.d/60-openscanstation-kodak.rules"
 cp "$ROOT_DIR/packaging/openscanstation-brother-buttons" "$BUILD_DIR/usr/bin/openscanstation-brother-buttons"
 cp "$ROOT_DIR/packaging/openscanstation-brother-buttons.service" "$BUILD_DIR/lib/systemd/system/openscanstation-brother-buttons.service"
+cp "$ROOT_DIR/packaging/openscanstation-brother-network" "$BUILD_DIR/usr/bin/openscanstation-brother-network"
+cp "$ROOT_DIR/packaging/openscanstation-brother-network.service" "$BUILD_DIR/lib/systemd/system/openscanstation-brother-network.service"
 chmod 0755 "$BUILD_DIR/usr/bin/openscanstation-brother-buttons"
+chmod 0755 "$BUILD_DIR/usr/bin/openscanstation-brother-network"
 
 if [ -f "$ROOT_DIR/integration/it-projektzentrale.json" ]; then
   cp "$ROOT_DIR/integration/it-projektzentrale.json" "$BUILD_DIR/usr/share/it-projektzentrale/projects/openscanstation.json"
@@ -40,7 +44,7 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: $ARCH
-Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils, tesseract-ocr, tesseract-ocr-deu, poppler-utils, zbar-tools, snmp
+Depends: python3, python3-usb, python3-pil, sane-utils, sane-airscan, usbutils, tesseract-ocr, tesseract-ocr-deu, poppler-utils, zbar-tools, snmp, samba
 Maintainer: Markus Ach
 Description: Zentrale Scannerplattform mit einheitlicher WebGUI
  OpenScanStation erkennt Scanner über Plugins und bietet Scanprofile,
@@ -62,7 +66,7 @@ for group in scanner lp; do
         adduser openscanstation "$group" >/dev/null 2>&1 || true
     fi
 done
-mkdir -p /var/lib/openscanstation/scans
+mkdir -p /var/lib/openscanstation/scans /var/lib/openscanstation/network-inbox
 chown -R openscanstation:openscanstation /var/lib/openscanstation
 chmod 0750 /var/lib/openscanstation /var/lib/openscanstation/scans
 if command -v udevadm >/dev/null 2>&1; then
@@ -75,6 +79,8 @@ if command -v systemctl >/dev/null 2>&1; then
     systemctl restart openscanstation.service || true
     systemctl enable openscanstation-brother-buttons.service || true
     systemctl restart openscanstation-brother-buttons.service || true
+    systemctl enable openscanstation-brother-network.service || true
+    systemctl restart openscanstation-brother-network.service || true
 fi
 exit 0
 EOF
@@ -86,6 +92,8 @@ set -e
 if command -v systemctl >/dev/null 2>&1; then
     systemctl stop openscanstation-brother-buttons.service || true
     systemctl disable openscanstation-brother-buttons.service || true
+    systemctl stop openscanstation-brother-network.service || true
+    systemctl disable openscanstation-brother-network.service || true
     systemctl stop openscanstation.service || true
     systemctl disable openscanstation.service || true
 fi
@@ -135,6 +143,7 @@ EOF
 
 find "$BUILD_DIR" -type d -exec chmod 0755 {} +
 chmod 0750 "$BUILD_DIR/var/lib/openscanstation" "$BUILD_DIR/var/lib/openscanstation/scans"
+chmod 0770 "$BUILD_DIR/var/lib/openscanstation/network-inbox"
 mkdir -p "$OUTPUT_DIR"
 dpkg-deb --root-owner-group --build "$BUILD_DIR" "$OUTPUT_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
 

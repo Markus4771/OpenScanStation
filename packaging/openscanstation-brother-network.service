@@ -1,0 +1,22 @@
+[Unit]
+Description=OpenScanStation Brother Scan-to-Network Inbox
+After=network-online.target smbd.service openscanstation.service
+Wants=network-online.target
+ConditionPathExists=/var/lib/openscanstation/brother_network.json
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/openscanstation
+ExecStart=/usr/bin/openscanstation-brother-network run
+Restart=on-failure
+RestartSec=5
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/openscanstation
+
+[Install]
+WantedBy=multi-user.target
