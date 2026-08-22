@@ -47,6 +47,15 @@ def add_document(filename: str, title: str, scanner: str, profile: str, fmt: str
         return int(cur.lastrowid)
 
 
+def rename_document(old_filename: str, new_filename: str) -> None:
+    """Haelt den Dokumentenkatalog nach einer Workflow-Umbenennung konsistent."""
+    if old_filename == new_filename:
+        return
+    with _connect() as db:
+        db.execute("UPDATE documents SET filename=? WHERE filename=?", (new_filename, old_filename))
+        db.commit()
+
+
 def list_documents(query: str = "", limit: int = 100) -> list[dict]:
     with _connect() as db:
         if query:
