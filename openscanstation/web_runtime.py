@@ -151,7 +151,7 @@ def _perform_profile_scan(form: dict[str, list[str]]) -> dict:
     target = SCAN_DIR / filename
     with web._SCAN_LOCK:
         result = plugin.start_scan(scanner.connection, {"output": str(target), "dpi": dpi, "mode": mode, "duplex": bool(profile.get("duplex")), "profile_id": profile_id})
-    add_document(filename, title, scanner.name, profile_id, output_format, 1, tags)
+    add_document(filename, title, scanner.name, profile_id, output_format, 1, tags, form.get("owner", [""])[0])
     ocr_error = ""
     if bool(profile.get("ocr", False)):
         try: run_ocr(filename)
@@ -160,9 +160,11 @@ def _perform_profile_scan(form: dict[str, list[str]]) -> dict:
     return {"ok": True, "filename": filename, "bytes": result.bytes_written, "download_url": f"/scans/{quote(filename)}", "ocr_error": ocr_error}
 
 
-def _dashboard(message: str = "", error: bool = False) -> str:
+def _dashboard(message: str = "", error: bool = False, username: str = "", is_admin: bool = False, allowed_scanners: set[str] | None = None) -> str:
     payload = web._scanner_payload()
     scanners = visible_scanners(payload.get("scanners", []))
+    if not is_admin and allowed_scanners is not None:
+        scanners = [scanner for scanner in scanners if scanner.get("id") in allowed_scanners]
     default_id = default_scanner_id(scanners)
     profiles = load_profiles()
     actions = [item for item in load_actions()["actions"] if item.get("enabled")]
@@ -181,7 +183,7 @@ def _dashboard(message: str = "", error: bool = False) -> str:
     if options:
         free_form = f'''<form method="post" action="/scan"><div class="form-grid"><label>Titel<input name="title" value="Dokument"></label><label>Scanner<select class="scanner-select" name="scanner_id">{scanner_options}</select></label><label>Scanprofil<select name="profile">{profile_options}</select></label><label>Tags<input name="tags" placeholder="Rechnung, Kunde"></label></div><p class="muted">Auflösung, Farbe, Format, OCR und Duplex kommen aus dem Scanprofil.</p><button>Scan starten</button></form>'''
         action_buttons = "".join(f'''<article class="card action-card"><h3>{a['slot']}: {html.escape(str(a['label']))}</h3><form method="post" action="/run-action"><label>Scanner<select class="scanner-select" name="scanner_id">{scanner_options}</select></label><input type="hidden" name="action_id" value="{html.escape(str(a['id']), quote=True)}"><button>Aktion starten</button></form></article>''' for a in actions)
-    docs = list_documents(limit=10)
+    docs = list_documents(limit=10, owner=None if is_admin else username)
     rows = "".join(f'<tr><td><a href="/scans/{quote(d["filename"])}">{html.escape(d["title"])}</a></td><td>{html.escape(d["scanner"])}</td><td>{html.escape(d["created_at"])}</td><td>{html.escape(d["ocr_status"])}</td></tr>' for d in docs) or '<tr><td colspan="4">Noch keine Dokumente.</td></tr>'
     content = f'<section class="panel"><h2>Schnellaktionen</h2><div class="grid">{action_buttons or "<p>Keine aktiven Scanneraktionen.</p>"}</div></section><section class="panel"><h2>Freier Scan</h2>{free_form}</section><div class="headline"><h2>Scanner</h2><div><a href="/scanners">Einrichten</a> · <form class="inline-form" method="post" action="/refresh-scanners"><button>Neu suchen</button></form></div></div><div class="grid">{"".join(cards)}</div><section class="panel"><h2>Letzte Dokumente</h2><table><tr><th>Titel</th><th>Scanner</th><th>Zeit</th><th>OCR</th></tr>{rows}</table></section>'
     return web._layout(content, notice=message, error=error).replace("<head>", '<head><meta http-equiv="refresh" content="30">', 1)

@@ -12,6 +12,7 @@
 - Workflow-Ausgabe auf SMB/NAS ist aktiv; Kennwörter erscheinen nicht in der Prozessliste.
 - Kommando `openscanstation-users` für lokale Konten ergänzt.
 - Fehlende Hardware-Routen für Brother-Geräteprofile und deren JSON-Manifest ergänzt.
+- Produktive Scanner-Laufzeit an die Mehrbenutzer-Signatur und Dokumenteigentümer angepasst.
 
 ## 0.18.0
 
