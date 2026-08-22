@@ -25,6 +25,10 @@ class Handler(BaseHTTPRequestHandler):
     from openscanstation.scanner_admin import render as page; return self.send(page(),head=head)
    if path in {"/profiles","/profile-assignment"}:
     from openscanstation.profile_assignment import render as page; return self.send(page(),head=head)
+   if path=="/brother-profiles":
+    from openscanstation.brother_device_profiles import render as page; return self.send(page(),head=head)
+   if path=="/api/brother-device-profiles":
+    from openscanstation.brother_device_profiles import manifest; return self.send(json.dumps(manifest(),ensure_ascii=False),ctype="application/json",head=head)
    if path=="/api/profiles":
     from openscanstation.profiles import load_profiles; return self.send(json.dumps(load_profiles(),ensure_ascii=False),ctype="application/json",head=head)
    if path=="/api/device-center":

@@ -11,6 +11,7 @@
 - SMB/NAS-Verbindungstest prüft Anmeldung, Freigabe und Unterordner mit `smbclient`.
 - Workflow-Ausgabe auf SMB/NAS ist aktiv; Kennwörter erscheinen nicht in der Prozessliste.
 - Kommando `openscanstation-users` für lokale Konten ergänzt.
+- Fehlende Hardware-Routen für Brother-Geräteprofile und deren JSON-Manifest ergänzt.
 
 ## 0.18.0
 
