@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Paketbau
+build/
+dist/
+*.deb
+
+# Editoren und Betriebssystem
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+.DS_Store
+
+# Lokale Laufzeitdaten und Geheimnisse
+*.log
+*.pid
+*.token
+*.secret
+.env
+.env.*
+

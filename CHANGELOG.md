@@ -20,6 +20,7 @@
 - Webadministration für Brother-Funktionstasten einschließlich SNMP-Registrierung und Ereignisstatus ergänzt.
 - Speicherziel-Dienst erhält gezielte Schreibrechte für Samba-Konfiguration und Kontendatenbank.
 - Brother-To-Network-Buttons können in der Speicher-Weboberfläche einzeln angelegt, zugeordnet und gelöscht werden.
+- Repository bereinigt: generierte Dateien werden ignoriert, veraltete Chat-Hilfsdateien entfernt und die Entwicklerstruktur dokumentiert.
 
 ## 0.18.0
 

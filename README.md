@@ -4,6 +4,8 @@
 
 OpenScanStation ist eine modulare Dokumentenscanner-Plattform für Linux und Debian. Die zentrale Weboberfläche läuft standardmäßig auf Port **8101** und verbindet Scanner, OCR, Dokumenterkennung, Workflows und Speicherziele.
 
+Entwicklung, Projektstruktur und Paketbau sind in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) beschrieben. Hardware- und Brother-Hinweise befinden sich gesammelt unter [docs/](docs/).
+
 ## Aktueller Funktionsumfang
 
 - zentrale Weboberfläche und REST-APIs
