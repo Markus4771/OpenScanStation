@@ -21,6 +21,7 @@
 - Speicherziel-Dienst erhält gezielte Schreibrechte für Samba-Konfiguration und Kontendatenbank.
 - Brother-To-Network-Buttons können in der Speicher-Weboberfläche einzeln angelegt, zugeordnet und gelöscht werden.
 - Repository bereinigt: generierte Dateien werden ignoriert, veraltete Chat-Hilfsdateien entfernt und die Entwicklerstruktur dokumentiert.
+- WebGUI neu geordnet: kompakte Bereichsnavigation, gruppierte Hardware-Werkzeuge, mobile Menüschaltung und übersichtlichere Speicherverwaltung.
 
 ## 0.18.0
 
